@@ -732,9 +732,24 @@
     if (!file) return;
     const reader = new FileReader();
     reader.onload = e => {
-      const data = e.target.result;
-      localStorage.setItem('lbs_img_' + key, data);
-      renderImgSlot(key, data);
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const data = canvas.toDataURL('image/jpeg', 0.7);
+        try {
+          localStorage.setItem('lbs_img_' + key, data);
+        } catch(e) {
+          alert('圖片仍太大，請先壓縮後再上傳。');
+          return;
+        }
+        renderImgSlot(key, data);
+      };
+      img.src = e.target.result;
     };
     reader.readAsDataURL(file);
   }
