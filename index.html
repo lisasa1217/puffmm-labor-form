@@ -565,12 +565,12 @@
       <div class="section-label">🪪 身分證（存於本機）</div>
       <div class="img-upload-row">
         <div class="img-slot" id="idFrontSlot" onclick="triggerImgUpload('idFront')">
-          <input type="file" accept="image/*" id="input_idFront" onchange="handleImgUpload('idFront', this)" style="display:none;" />
+          <input type="file" accept="image/*" id="input_idFront" onchange="handleImgUpload('idFront', this)" style="visibility:hidden;position:absolute;width:0;height:0;overflow:hidden;" />
           <span class="slot-icon">📷</span>
           <span class="slot-label">正面</span>
         </div>
         <div class="img-slot" id="idBackSlot" onclick="triggerImgUpload('idBack')">
-          <input type="file" accept="image/*" id="input_idBack" onchange="handleImgUpload('idBack', this)" style="display:none;" />
+          <input type="file" accept="image/*" id="input_idBack" onchange="handleImgUpload('idBack', this)" style="visibility:hidden;position:absolute;width:0;height:0;overflow:hidden;" />
           <span class="slot-icon">📷</span>
           <span class="slot-label">反面</span>
         </div>
@@ -581,7 +581,7 @@
     <div>
       <div class="section-label">🏦 存摺封面（存於本機）</div>
       <div class="img-slot" id="bankSlot" style="height:80px;" onclick="triggerImgUpload('bank')">
-        <input type="file" accept="image/*" id="input_bank" onchange="handleImgUpload('bank', this)" style="display:none;" />
+        <input type="file" accept="image/*" id="input_bank" onchange="handleImgUpload('bank', this)" style="visibility:hidden;position:absolute;width:0;height:0;overflow:hidden;" />
         <span class="slot-icon">📷</span>
         <span class="slot-label">存摺封面照片</span>
       </div>
