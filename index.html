@@ -386,6 +386,9 @@
   }
   .img-slot:hover { border-color: var(--accent); background: rgba(45,106,79,0.04); }
   .img-slot .slot-label { font-size: 11px; color: var(--muted); }
+  .img-slot input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
   .img-slot .slot-icon { font-size: 20px; }
   .img-slot img { width: 100%; height: 60px; object-fit: cover; border-radius: 4px; }
   .img-slot .clear-img {
@@ -560,6 +563,23 @@
     </div>
 
 
+    <!-- ID CARD -->
+    <div>
+      <div class="section-label">🪪 身分證（存於本機）</div>
+      <div class="img-upload-row">
+        <div class="img-slot" id="idFrontSlot">
+          <input type="file" accept="image/*" id="input_idFront" onchange="handleImgUpload('idFront', this)" />
+          <span class="slot-icon">📷</span>
+          <span class="slot-label">正面</span>
+        </div>
+        <div class="img-slot" id="idBackSlot">
+          <input type="file" accept="image/*" id="input_idBack" onchange="handleImgUpload('idBack', this)" />
+          <span class="slot-icon">📷</span>
+          <span class="slot-label">反面</span>
+        </div>
+      </div>
+    </div>
+
     <!-- BANK PASSBOOK -->
     <div>
       <div class="section-label">🏦 存摺封面（存於本機）</div>
@@ -703,7 +723,7 @@
   loadProfile();
 
   // ── Image Upload & Storage ─────────────────────────────────
-  const IMG_KEYS = ['bank'];
+  const IMG_KEYS = ['idFront', 'idBack', 'bank'];
 
   function handleImgUpload(key, input) {
     const file = input.files[0];
@@ -720,11 +740,14 @@
   function renderImgSlot(key, data) {
     const slot = document.getElementById(key + 'Slot');
     if (!slot) return;
+    // hide file input overlay so preview is visible
+    const input = slot.querySelector('input[type="file"]');
+    if (input) input.style.display = 'none';
     // hide default icons
     const icon = slot.querySelector('.slot-icon');
-    const label = slot.querySelector('.slot-label');
+    const lbl = slot.querySelector('.slot-label');
     if (icon) icon.style.display = 'none';
-    if (label) label.style.display = 'none';
+    if (lbl) lbl.style.display = 'none';
     // update or create preview
     let img = slot.querySelector('img.slot-preview');
     if (!img) {
@@ -747,16 +770,19 @@
   function clearImg(key) {
     localStorage.removeItem('lbs_img_' + key);
     const slot = document.getElementById(key + 'Slot');
+    // restore file input overlay
+    const input = slot.querySelector('input[type="file"]');
+    if (input) { input.style.display = ''; input.value = ''; }
+    // remove preview and clear button
     const preview = slot.querySelector('img.slot-preview');
     if (preview) preview.remove();
     const clearBtn = slot.querySelector('.clear-img');
     if (clearBtn) clearBtn.remove();
+    // restore icons
     const icon = slot.querySelector('.slot-icon');
-    const label = slot.querySelector('.slot-label');
+    const lbl = slot.querySelector('.slot-label');
     if (icon) icon.style.display = '';
-    if (label) label.style.display = '';
-    const input = document.getElementById('input_' + key);
-    if (input) input.value = '';
+    if (lbl) lbl.style.display = '';
   }
 
   function loadImages() {
@@ -1196,10 +1222,14 @@ ${pdfText.substring(0, 6000)}
       </div>
 
       ${(()=>{
+        const idF = localStorage.getItem('lbs_img_idFront');
+        const idB = localStorage.getItem('lbs_img_idBack');
         const bank = localStorage.getItem('lbs_img_bank');
         const sig = localStorage.getItem('lbs_sig');
         const items = [];
         const stamp = localStorage.getItem('lbs_stamp');
+        if (idF) items.push(`<div class="img-preview-card"><div class="img-label">身分證正面</div><img src="${idF}" /></div>`);
+        if (idB) items.push(`<div class="img-preview-card"><div class="img-label">身分證反面</div><img src="${idB}" /></div>`);
         if (bank) items.push(`<div class="img-preview-card"><div class="img-label">存摺封面</div><img src="${bank}" /></div>`);
         if (sig) items.push(`<div class="img-preview-card"><div class="img-label">簽名</div><img src="${sig}" /></div>`);
         if (stamp) items.push(`<div class="img-preview-card"><div class="img-label">印章</div><img src="${stamp}" /></div>`);
