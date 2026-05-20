@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>勞報單填寫助手</title>
 <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
@@ -635,7 +636,7 @@
 
     <!-- ANALYZE -->
     <button class="analyze-btn" id="analyzeBtn" disabled onclick="analyze()">
-      ✦ 開始分析並填入資料
+      ✦ 讀取欄位並預覽
     </button>
 
   </div>
@@ -665,6 +666,7 @@
   // ── State ─────────────────────────────────────────────────
   let pdfText = '';
   let fileName = '';
+  let originalArrayBuffer = null;
 
   // ── Birth date dropdowns ───────────────────────────────────
   (function() {
@@ -984,11 +986,11 @@
     showFileInfo(file.name);
 
     const arrayBuffer = await file.arrayBuffer();
+    originalArrayBuffer = arrayBuffer.slice(0);
     const ext = file.name.split('.').pop().toLowerCase();
 
     try {
       if (ext === 'pdf') {
-        // PDF extraction
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         let text = '';
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -1049,94 +1051,121 @@
       </div>`;
   }
 
-  // ── Analyze ────────────────────────────────────────────────
-  async function analyze() {
-    // Today's date in ROC calendar
-    const now = new Date();
-    const rocYear = now.getFullYear() - 1911;
-    const todayROC = `民國 ${rocYear} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
-    const todayAD = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+  // ── Field name → profile value matching ───────────────────
+  function matchField(name, profile) {
+    const n = (name || '').toLowerCase();
+    const rules = [
+      { kws: ['姓名','name','收款人','領款人','立據人','受款人','申請人'], v: profile.name },
+      { kws: ['身分證','idno','id_no','統一編號','身份證'],               v: profile.id },
+      { kws: ['出生年月日','出生日期','生日','birthday','birth'],         v: profile.birth },
+      { kws: ['國籍'],                                                    v: profile.nationality },
+      { kws: ['居留證','護照','passport'],                                v: profile.residency },
+      { kws: ['戶籍地址','戶籍'],                                         v: profile.addr },
+      { kws: ['通訊地址','聯絡地址','住址','address'],                    v: profile.addr2 || profile.addr },
+      { kws: ['電話','phone','tel','手機','mobile'],                       v: profile.phone },
+      { kws: ['email','信箱','電郵'],                                      v: profile.email },
+      { kws: ['銀行名稱','開戶銀行','匯款銀行','bank'],                   v: [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ') },
+      { kws: ['銀行代碼','代碼','代號','bankcode'],                       v: profile.bank_code },
+      { kws: ['帳號','account','存款帳'],                                  v: profile.bank_acc },
+      { kws: ['戶名','holder','帳戶名'],                                   v: profile.bank_holder },
+      { kws: ['日期','date','填表','立據','申請'],                         v: profile.today_roc },
+    ];
+    for (const r of rules) {
+      if (r.kws.some(k => n.includes(k))) return r.v || null;
+    }
+    return null;
+  }
 
+  function getProfile() {
     const by = document.getElementById('f_birth_y').value;
     const bm = document.getElementById('f_birth_m').value;
     const bd = document.getElementById('f_birth_d').value;
-    const birthStr = (by && bm && bd) ? `民國 ${by} 年 ${bm} 月 ${bd} 日` : '（未填）';
-
-    const profile = {
+    const now = new Date();
+    return {
       nationality: document.getElementById('f_nationality').value,
-      residency: document.getElementById('f_residency').value,
-      name: document.getElementById('f_name').value,
-      id: document.getElementById('f_id').value,
-      birth: birthStr,
-      addr: document.getElementById('f_addr').value,
-      addr2: document.getElementById('f_addr2').value,
-      phone: document.getElementById('f_phone').value,
-      bank_name: document.getElementById('f_bank_name').value,
+      residency:   document.getElementById('f_residency').value,
+      name:        document.getElementById('f_name').value,
+      id:          document.getElementById('f_id').value,
+      birth:       (by && bm && bd) ? `民國 ${by} 年 ${bm} 月 ${bd} 日` : '',
+      addr:        document.getElementById('f_addr').value,
+      addr2:       document.getElementById('f_addr2').value,
+      phone:       document.getElementById('f_phone').value,
+      bank_name:   document.getElementById('f_bank_name').value,
       bank_branch: document.getElementById('f_bank_branch').value,
-      bank_code: document.getElementById('f_bank_code').value,
-      bank_acc: document.getElementById('f_bank_acc').value,
+      bank_code:   document.getElementById('f_bank_code').value,
+      bank_acc:    document.getElementById('f_bank_acc').value,
       bank_holder: document.getElementById('f_bank_holder').value || document.getElementById('f_name').value,
-      email: document.getElementById('f_email').value,
-      today_roc: todayROC,
-      today_ad: todayAD,
+      email:       document.getElementById('f_email').value,
+      today_roc:   `民國 ${now.getFullYear()-1911} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`,
+      today_ad:    `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`,
     };
+  }
 
-    // Show loading
+  // ── Fill & Download ────────────────────────────────────────
+  async function fillAndDownload() {
+    const profile = getProfile();
+    const { PDFDocument } = PDFLib;
+    const pdfDoc = await PDFDocument.load(originalArrayBuffer.slice(0));
+    const form = pdfDoc.getForm();
+    let filled = 0;
+    for (const field of form.getFields()) {
+      if (field.constructor.name !== 'PDFTextField') continue;
+      const val = matchField(field.getName(), profile);
+      if (val) { try { field.setText(val); filled++; } catch(e) {} }
+    }
+    const bytes = await pdfDoc.save();
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '已填寫_' + fileName;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Analyze ────────────────────────────────────────────────
+  async function analyze() {
+    const profile = getProfile();
+
     document.getElementById('mainPanel').innerHTML = `
       <div class="loading-state">
         <div class="spinner"></div>
-        <p>正在分析勞報單欄位<span class="dots"></span></p>
+        <p>正在讀取 PDF 表單欄位<span class="dots"></span></p>
       </div>`;
 
-    // 本地規則比對，不需要 API
-    const result = (() => {
-      const t = pdfText;
-      const has = (...kws) => kws.some(k => t.includes(k));
+    try {
+      const { PDFDocument } = PDFLib;
+      const pdfDoc = await PDFDocument.load(originalArrayBuffer.slice(0));
+      const form = pdfDoc.getForm();
+      const pdfFields = form.getFields();
+      const textFields = pdfFields.filter(f => f.constructor.name === 'PDFTextField');
 
-      const bankFull = [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ');
+      if (textFields.length === 0) {
+        showError('此 PDF 沒有偵測到可填寫的表單欄位（AcroForm）。請確認 PDF 有互動式欄位。');
+        return;
+      }
 
-      // 規則定義：keywords 命中就加入欄位
-      const rules = [
-        { kws: ['姓名','收款人','領款人','立據人','受款人','申請人'],   label: '姓名',           value: profile.name },
-        { kws: ['身分證字號','身分證號','統一編號','身份證'],            label: '身分證字號',      value: profile.id },
-        { kws: ['出生年月日','生日','出生日期'],                         label: '出生年月日',      value: profile.birth },
-        { kws: ['國籍別','國籍'],                                        label: '國籍別',          value: profile.nationality },
-        { kws: ['居留證','護照號'],                                       label: '居留證／護照號碼', value: profile.residency || null, note: profile.residency ? '' : '本國籍免填' },
-        { kws: ['戶籍地址','戶籍'],                                      label: '戶籍地址',        value: profile.addr },
-        { kws: ['通訊地址','聯絡地址','住址','地址'],                    label: '通訊地址',        value: profile.addr2 || profile.addr },
-        { kws: ['聯絡電話','電話','手機','行動電話'],                    label: '聯絡電話',        value: profile.phone },
-        { kws: ['電子信箱','email','e-mail','電郵'],                     label: '電子信箱',        value: profile.email },
-        { kws: ['開戶銀行','匯款銀行','銀行名稱','銀行'],               label: '銀行名稱',        value: bankFull },
-        { kws: ['銀行代碼','銀行代號','行庫代號'],                       label: '銀行代碼',        value: profile.bank_code },
-        { kws: ['帳號','銀行帳號','存款帳號','匯款帳號'],               label: '銀行帳號',        value: profile.bank_acc },
-        { kws: ['戶名','帳戶名稱','存款人'],                             label: '戶名',            value: profile.bank_holder },
-        { kws: ['填表日期','立據日期','申請日期','日期'],               label: '填表日期',        value: profile.today_roc },
-        // 廠商填寫欄位
-        { kws: ['服務期間','工作期間','勞務期間'],  label: '服務期間',   value: null, note: '由廠商填寫' },
-        { kws: ['勞務報酬','報酬金額','薪資金額','出席費','費用','金額'], label: '勞務報酬金額', value: null, note: '由廠商填寫' },
-        { kws: ['扣繳','扣繳稅額','預扣稅'],       label: '扣繳稅額',   value: null, note: '由廠商填寫' },
-        { kws: ['實領','實付金額','實際金額'],      label: '實領金額',   value: null, note: '由廠商填寫' },
-      ];
+      const titleMatch = pdfText.match(/(勞務報酬單|出席費領據|勞報單|鐘點費|講師費|稿費|版稅|勞務費)/);
+      const title = titleMatch ? titleMatch[0] : fileName;
 
-      // 若 PDF 幾乎讀不到文字，就直接全部列出
-      const fields = t.trim().length < 50
-        ? rules.slice(0, 13).map(r => ({ label: r.label, value: r.value || null, note: r.note || '' }))
-        : rules.filter(r => has(...r.kws)).map(r => ({ label: r.label, value: r.value || null, note: r.note || '' }));
-
-      // 偵測表單名稱
-      const titleMatch = t.match(/(勞務報酬單|出席費領據|勞報單|鐘點費|講師費|稿費|版稅|勞務費)/);
-      const title = titleMatch ? titleMatch[0] : (fileName || '勞報單');
+      const fields = textFields.map(f => {
+        const label = f.getName();
+        const value = matchField(label, profile);
+        return { label, value, note: value ? '' : '未能自動對應，需手動確認' };
+      });
 
       const filled = fields.filter(f => f.value).length;
-      return {
+      const result = {
         title,
         fields,
-        missing: ['服務期間', '勞務報酬金額', '扣繳稅額（若有）', '實領金額'],
-        summary: `共找到 ${fields.length} 個欄位，其中 ${filled} 個已帶入個人資料`
+        missing: [],
+        summary: `PDF 共有 ${fields.length} 個欄位，${filled} 個已自動對應資料`
       };
-    })();
 
-    showResult(result, profile);
+      showResult(result, profile);
+    } catch(e) {
+      showError('讀取 PDF 表單欄位失敗：' + e.message);
+    }
   }
 
   function showResult(result, profile) {
@@ -1168,15 +1197,15 @@
           <div style="font-size:18px;font-weight:600;color:var(--text);">${result.title || fileName}</div>
           <div style="font-size:13px;color:var(--muted);margin-top:4px;">${result.summary || ''}</div>
         </div>
-        <button class="copy-all-btn" onclick="copyAll(\`${allValues.replace(/`/g,'\\`')}\`)">
-          ⎘ 複製全部欄位
+        <button class="analyze-btn" style="width:auto;padding:12px 24px;font-size:15px;" onclick="fillAndDownload()">
+          ⬇ 填入並下載 PDF
         </button>
       </div>
 
       <div class="result-card">
         <div class="result-card-header">
-          <h3>填寫內容</h3>
-          <span class="status-tag">AI 分析完成</span>
+          <h3>對應欄位預覽</h3>
+          <span class="status-tag">欄位讀取完成</span>
         </div>
         <div class="result-card-body" style="padding:0;">
           <table class="filled-table">
