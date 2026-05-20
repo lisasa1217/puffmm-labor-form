@@ -1102,25 +1102,75 @@
   }
 
   // ── Fill & Download ────────────────────────────────────────
-  async function fillAndDownload() {
-    const profile = getProfile();
-    const { PDFDocument } = PDFLib;
-    const pdfDoc = await PDFDocument.load(originalArrayBuffer.slice(0));
-    const form = pdfDoc.getForm();
-    let filled = 0;
-    for (const field of form.getFields()) {
-      if (field.constructor.name !== 'PDFTextField') continue;
-      const val = matchField(field.getName(), profile);
-      if (val) { try { field.setText(val); filled++; } catch(e) {} }
-    }
-    const bytes = await pdfDoc.save();
+  let fillMode = 'acro';
+  let canvasPlacements = [];
+
+  function downloadBytes(bytes, name) {
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = '已填寫_' + fileName;
+    a.href = url; a.download = name;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  async function fillAndDownload() {
+    if (fillMode === 'acro') {
+      const profile = getProfile();
+      const { PDFDocument } = PDFLib;
+      const pdfDoc = await PDFDocument.load(originalArrayBuffer.slice(0));
+      const form = pdfDoc.getForm();
+      for (const field of form.getFields()) {
+        if (field.constructor.name !== 'PDFTextField') continue;
+        const val = matchField(field.getName(), profile);
+        if (val) { try { field.setText(val); } catch(e) {} }
+      }
+      downloadBytes(await pdfDoc.save(), '已填寫_' + fileName);
+    } else {
+      await fillCanvas();
+    }
+  }
+
+  async function fillCanvas() {
+    const btn = document.querySelector('[onclick="fillAndDownload()"]');
+    if (btn) { btn.textContent = '⏳ 產生中，請稍候...'; btn.disabled = true; }
+
+    const pdf = await pdfjsLib.getDocument({ data: originalArrayBuffer.slice(0) }).promise;
+    const { PDFDocument } = PDFLib;
+    const newPdf = await PDFDocument.create();
+    const scale = 2;
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale });
+      const orig    = page.getViewport({ scale: 1 });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // draw overlays
+      for (const p of canvasPlacements.filter(p => p.page === pageNum)) {
+        const fs = Math.max(p.fontSize, 9) * scale * 0.85;
+        ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
+        ctx.fillStyle = '#000';
+        ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
+      }
+
+      const imgBytes = Uint8Array.from(
+        atob(canvas.toDataURL('image/png').split(',')[1]),
+        c => c.charCodeAt(0)
+      );
+      const img = await newPdf.embedPng(imgBytes);
+      const pg = newPdf.addPage([orig.width, orig.height]);
+      pg.drawImage(img, { x: 0, y: 0, width: orig.width, height: orig.height });
+    }
+
+    downloadBytes(await newPdf.save(), '已填寫_' + fileName);
+    if (btn) { btn.textContent = '⬇ 填入並下載 PDF'; btn.disabled = false; }
   }
 
   // ── Analyze ────────────────────────────────────────────────
@@ -1134,37 +1184,74 @@
       </div>`;
 
     try {
-      const { PDFDocument } = PDFLib;
-      const pdfDoc = await PDFDocument.load(originalArrayBuffer.slice(0));
-      const form = pdfDoc.getForm();
-      const pdfFields = form.getFields();
-      const textFields = pdfFields.filter(f => f.constructor.name === 'PDFTextField');
-
-      if (textFields.length === 0) {
-        showError('此 PDF 沒有偵測到可填寫的表單欄位（AcroForm）。請確認 PDF 有互動式欄位。');
-        return;
-      }
-
       const titleMatch = pdfText.match(/(勞務報酬單|出席費領據|勞報單|鐘點費|講師費|稿費|版稅|勞務費)/);
       const title = titleMatch ? titleMatch[0] : fileName;
 
-      const fields = textFields.map(f => {
-        const label = f.getName();
-        const value = matchField(label, profile);
-        return { label, value, note: value ? '' : '未能自動對應，需手動確認' };
-      });
+      // Try AcroForm first
+      const { PDFDocument } = PDFLib;
+      const pdfDoc = await PDFDocument.load(originalArrayBuffer.slice(0));
+      const textFields = pdfDoc.getForm().getFields().filter(f => f.constructor.name === 'PDFTextField');
 
-      const filled = fields.filter(f => f.value).length;
-      const result = {
-        title,
-        fields,
-        missing: [],
-        summary: `PDF 共有 ${fields.length} 個欄位，${filled} 個已自動對應資料`
-      };
+      if (textFields.length > 0) {
+        fillMode = 'acro';
+        const fields = textFields.map(f => {
+          const label = f.getName();
+          const value = matchField(label, profile);
+          return { label, value, note: value ? '' : '未能自動對應，需手動確認' };
+        });
+        const filled = fields.filter(f => f.value).length;
+        showResult({
+          title, fields, missing: [],
+          summary: `PDF 共有 ${fields.length} 個互動式欄位，已自動對應 ${filled} 個`
+        }, profile);
+      } else {
+        // Canvas fallback: scan text positions and place values after matching labels
+        fillMode = 'canvas';
+        canvasPlacements = [];
+        document.getElementById('mainPanel').innerHTML = `
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>無互動式欄位，改用文字偵測模式<span class="dots"></span></p>
+          </div>`;
 
-      showResult(result, profile);
+        const pdfJS = await pdfjsLib.getDocument({ data: originalArrayBuffer.slice(0) }).promise;
+        const placedValues = new Set();
+        const fields = [];
+
+        for (let pageNum = 1; pageNum <= pdfJS.numPages; pageNum++) {
+          const page = await pdfJS.getPage(pageNum);
+          const tc = await page.getTextContent();
+
+          for (const item of tc.items) {
+            if (!item.str || !item.str.trim()) continue;
+            const val = matchField(item.str, profile);
+            if (!val || placedValues.has(val)) continue;
+            placedValues.add(val);
+
+            const tx = item.transform[4];
+            const ty = item.transform[5];
+            const fs = Math.abs(item.transform[3]) || 12;
+            const approxW = item.width || (item.str.length * fs * 0.55);
+
+            canvasPlacements.push({
+              page: pageNum,
+              x: tx + approxW + 2,
+              y: ty,
+              value: val,
+              fontSize: fs,
+            });
+            fields.push({ label: item.str.trim(), value: val, note: '' });
+          }
+        }
+
+        const filled = fields.length;
+        showResult({
+          title, fields, missing: [],
+          summary: `偵測到 ${filled} 個標籤位置，將以文字疊加方式填入`
+        }, profile);
+      }
     } catch(e) {
-      showError('讀取 PDF 表單欄位失敗：' + e.message);
+      showError('讀取 PDF 失敗：' + e.message);
     }
   }
 
