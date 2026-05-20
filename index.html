@@ -1104,6 +1104,7 @@
   // ── Fill & Download ────────────────────────────────────────
   let fillMode = 'acro';
   let canvasPlacements = [];
+  let imagePlacements = [];
 
   function downloadBytes(bytes, name) {
     const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -1152,7 +1153,7 @@
       const ctx = canvas.getContext('2d');
       await page.render({ canvasContext: ctx, viewport }).promise;
 
-      // draw overlays
+      // Draw text overlays
       for (const p of canvasPlacements.filter(p => p.page === pageNum)) {
         const fs = Math.max(p.fontSize, 9) * scale * 0.85;
         ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
@@ -1160,40 +1161,76 @@
         ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
       }
 
+      // Draw ID card images in their detected paste areas
+      for (const ip of imagePlacements.filter(p => p.page === pageNum)) {
+        const data = localStorage.getItem('lbs_img_' + ip.key);
+        if (!data) continue;
+        const imgEl = new Image();
+        await new Promise(res => { imgEl.onload = res; imgEl.src = data; });
+        const cx = ip.x * scale;
+        const cy = viewport.height - (ip.y + ip.height) * scale;
+        const cw = ip.width * scale;
+        const ch = ip.height * scale;
+        // Fit image proportionally inside the box
+        const ratio = Math.min(cw / imgEl.width, ch / imgEl.height);
+        const dw = imgEl.width * ratio, dh = imgEl.height * ratio;
+        ctx.drawImage(imgEl, cx + (cw - dw) / 2, cy + (ch - dh) / 2, dw, dh);
+      }
+
       const imgBytes = Uint8Array.from(
         atob(canvas.toDataURL('image/png').split(',')[1]),
         c => c.charCodeAt(0)
       );
-      const img = await newPdf.embedPng(imgBytes);
+      const embImg = await newPdf.embedPng(imgBytes);
       const pg = newPdf.addPage([orig.width, orig.height]);
-      pg.drawImage(img, { x: 0, y: 0, width: orig.width, height: orig.height });
-    }
-
-    // Append ID card / bankbook images as extra pages
-    const imgSlots = [
-      { key: 'idFront', label: '身分證正面' },
-      { key: 'idBack',  label: '身分證反面' },
-      { key: 'bank',    label: '存摺封面' },
-    ];
-    for (const slot of imgSlots) {
-      const data = localStorage.getItem('lbs_img_' + slot.key);
-      if (!data) continue;
-      try {
-        const b64 = data.split(',')[1];
-        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-        const isPng = data.startsWith('data:image/png');
-        const embeddedImg = isPng ? await newPdf.embedPng(bytes) : await newPdf.embedJpg(bytes);
-        // Fit to A4 (595 × 842 pt)
-        const maxW = 595, maxH = 842;
-        const ratio = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height, 1);
-        const w = embeddedImg.width * ratio, h = embeddedImg.height * ratio;
-        const pg = newPdf.addPage([maxW, maxH]);
-        pg.drawImage(embeddedImg, { x: (maxW - w) / 2, y: (maxH - h) / 2, width: w, height: h });
-      } catch(e) { /* skip bad image */ }
+      pg.drawImage(embImg, { x: 0, y: 0, width: orig.width, height: orig.height });
     }
 
     downloadBytes(await newPdf.save(), '已填寫_' + fileName);
     if (btn) { btn.textContent = '⬇ 填入並下載 PDF'; btn.disabled = false; }
+  }
+
+  // ── Preview ────────────────────────────────────────────────
+  async function renderPreview(containerId) {
+    const wrap = document.getElementById(containerId);
+    if (!wrap || !originalArrayBuffer) return;
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px;">預覽載入中…</div>';
+
+    const pdf = await pdfjsLib.getDocument({ data: originalArrayBuffer.slice(0) }).promise;
+    const page = await pdf.getPage(1);
+    const scale = 1.5;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    canvas.style.cssText = 'width:100%;border-radius:6px;display:block;';
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    // Text overlays (red so user can see them clearly)
+    for (const p of canvasPlacements.filter(p => p.page === 1)) {
+      const fs = Math.max(p.fontSize, 9) * scale * 0.85;
+      ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
+      ctx.fillStyle = 'rgba(200,0,0,0.85)';
+      ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
+    }
+
+    // Image overlays
+    for (const ip of imagePlacements.filter(p => p.page === 1)) {
+      const data = localStorage.getItem('lbs_img_' + ip.key);
+      if (!data) continue;
+      const imgEl = new Image();
+      await new Promise(res => { imgEl.onload = res; imgEl.src = data; });
+      const cx = ip.x * scale, cy = viewport.height - (ip.y + ip.height) * scale;
+      const cw = ip.width * scale, ch = ip.height * scale;
+      const ratio = Math.min(cw / imgEl.width, ch / imgEl.height);
+      const dw = imgEl.width * ratio, dh = imgEl.height * ratio;
+      ctx.drawImage(imgEl, cx + (cw - dw) / 2, cy + (ch - dh) / 2, dw, dh);
+    }
+
+    wrap.innerHTML = '';
+    wrap.appendChild(canvas);
   }
 
   // ── Analyze ────────────────────────────────────────────────
@@ -1294,6 +1331,29 @@
               fields.push({ label: item.str.trim(), value: val, note: '' });
             }
           }
+
+          // Detect 正面/反面 image paste areas
+          imagePlacements = [];
+          const frontItem = allItems.find(i => i.str.trim() === '正面');
+          const backItem  = allItems.find(i => i.str.trim() === '反面');
+          if (frontItem || backItem) {
+            const vp = await (await pdfJS.getPage(pageNum)).getViewport({ scale: 1 });
+            const ref = frontItem || backItem;
+            const refY = ref.transform[5];
+            // Estimate box: starts below the label, ends near page bottom margin
+            const boxH = Math.max(refY - 50, 80);
+            const boxY = refY - boxH - (Math.abs(ref.transform[3]) || 10);
+            if (frontItem) {
+              const fx = frontItem.transform[4];
+              const fw = (backItem ? backItem.transform[4] - fx : vp.width / 2) - 8;
+              imagePlacements.push({ page: pageNum, x: fx, y: boxY, width: fw, height: boxH, key: 'idFront' });
+            }
+            if (backItem) {
+              const bx = backItem.transform[4];
+              const bw = vp.width - bx - 20;
+              imagePlacements.push({ page: pageNum, x: bx, y: boxY, width: bw, height: boxH, key: 'idBack' });
+            }
+          }
         }
 
         showResult({
@@ -1329,6 +1389,8 @@
       ? result.fields.filter(f => f.value).map(f => `${f.label}：${f.value}`).join('\n')
       : '';
 
+    const isCanvas = (fillMode === 'canvas');
+
     document.getElementById('mainPanel').innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
@@ -1339,6 +1401,17 @@
           ⬇ 填入並下載 PDF
         </button>
       </div>
+
+      ${isCanvas ? `
+      <div class="result-card">
+        <div class="result-card-header">
+          <h3>預覽（第 1 頁）</h3>
+          <span class="status-tag" style="background:var(--accent-muted);color:var(--accent);">文字以紅色標示確認位置</span>
+        </div>
+        <div class="result-card-body" id="pdfPreviewArea" style="padding:8px;background:#f5f5f5;border-radius:0 0 12px 12px;">
+          <div style="color:var(--muted);font-size:13px;">載入中…</div>
+        </div>
+      </div>` : ''}
 
       <div class="result-card">
         <div class="result-card-header">
@@ -1363,7 +1436,7 @@
 
       <div class="notes-box">
         <strong>📌 使用方式</strong><br>
-        點擊欄位右側 ⎘ 可複製單一欄位內容。「複製全部欄位」可一次複製所有已填資料，方便貼到記事本對照填寫。
+        ${isCanvas ? '預覽確認紅字位置正確後，點上方按鈕下載填好的 PDF。' : '點擊欄位右側 ⎘ 可複製單一欄位內容。'}
       </div>
 
       ${(()=>{
@@ -1385,6 +1458,8 @@
         </div>`;
       })()}
     `;
+
+    if (isCanvas) renderPreview('pdfPreviewArea');
   }
 
   function showRawResult(raw) {
