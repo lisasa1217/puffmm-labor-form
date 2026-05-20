@@ -1169,6 +1169,29 @@
       pg.drawImage(img, { x: 0, y: 0, width: orig.width, height: orig.height });
     }
 
+    // Append ID card / bankbook images as extra pages
+    const imgSlots = [
+      { key: 'idFront', label: '身分證正面' },
+      { key: 'idBack',  label: '身分證反面' },
+      { key: 'bank',    label: '存摺封面' },
+    ];
+    for (const slot of imgSlots) {
+      const data = localStorage.getItem('lbs_img_' + slot.key);
+      if (!data) continue;
+      try {
+        const b64 = data.split(',')[1];
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const isPng = data.startsWith('data:image/png');
+        const embeddedImg = isPng ? await newPdf.embedPng(bytes) : await newPdf.embedJpg(bytes);
+        // Fit to A4 (595 × 842 pt)
+        const maxW = 595, maxH = 842;
+        const ratio = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height, 1);
+        const w = embeddedImg.width * ratio, h = embeddedImg.height * ratio;
+        const pg = newPdf.addPage([maxW, maxH]);
+        pg.drawImage(embeddedImg, { x: (maxW - w) / 2, y: (maxH - h) / 2, width: w, height: h });
+      } catch(e) { /* skip bad image */ }
+    }
+
     downloadBytes(await newPdf.save(), '已填寫_' + fileName);
     if (btn) { btn.textContent = '⬇ 填入並下載 PDF'; btn.disabled = false; }
   }
@@ -1205,7 +1228,7 @@
           summary: `PDF 共有 ${fields.length} 個互動式欄位，已自動對應 ${filled} 個`
         }, profile);
       } else {
-        // Canvas fallback: scan text positions and place values after matching labels
+        // Canvas fallback: group items by line, detect fill targets (underscores or gap after label)
         fillMode = 'canvas';
         canvasPlacements = [];
         document.getElementById('mainPanel').innerHTML = `
@@ -1221,33 +1244,61 @@
         for (let pageNum = 1; pageNum <= pdfJS.numPages; pageNum++) {
           const page = await pdfJS.getPage(pageNum);
           const tc = await page.getTextContent();
+          const allItems = tc.items.filter(i => i.str);
 
-          for (const item of tc.items) {
-            if (!item.str || !item.str.trim()) continue;
-            const val = matchField(item.str, profile);
-            if (!val || placedValues.has(val)) continue;
-            placedValues.add(val);
-
-            const tx = item.transform[4];
-            const ty = item.transform[5];
+          // Group items into lines (same y ± fontSize/2)
+          const lines = [];
+          for (const item of allItems) {
+            const iy = item.transform[5];
             const fs = Math.abs(item.transform[3]) || 12;
-            const approxW = item.width || (item.str.length * fs * 0.55);
+            let line = lines.find(l => Math.abs(l.y - iy) < fs * 0.6);
+            if (!line) { line = { y: iy, items: [] }; lines.push(line); }
+            line.items.push(item);
+          }
+          for (const line of lines) line.items.sort((a, b) => a.transform[4] - b.transform[4]);
 
-            canvasPlacements.push({
-              page: pageNum,
-              x: tx + approxW + 2,
-              y: ty,
-              value: val,
-              fontSize: fs,
-            });
-            fields.push({ label: item.str.trim(), value: val, note: '' });
+          for (const line of lines) {
+            for (let i = 0; i < line.items.length; i++) {
+              const item = line.items[i];
+              const val = matchField(item.str, profile);
+              if (!val || placedValues.has(val)) continue;
+              placedValues.add(val);
+
+              const lx = item.transform[4];
+              const ly = item.transform[5];
+              const fs = Math.abs(item.transform[3]) || 12;
+              const lw = item.width || (item.str.length * fs * 0.6);
+
+              let px = lx + lw + 4, py = ly;
+
+              // Look for underscore item to the right on same line
+              for (let j = i + 1; j < line.items.length; j++) {
+                const next = line.items[j];
+                if (/^[\s_＿─\-]+$/.test(next.str) && next.str.trim().length > 0) {
+                  px = next.transform[4] + 2;
+                  py = next.transform[5];
+                  break;
+                }
+                // Large gap to next item → fill in the gap
+                const gapStart = lx + lw;
+                const gapEnd = next.transform[4];
+                if (gapEnd - gapStart > fs * 4 && !matchField(next.str, profile)) {
+                  px = gapStart + 4;
+                  py = ly;
+                  break;
+                }
+                if (matchField(next.str, profile)) break;
+              }
+
+              canvasPlacements.push({ page: pageNum, x: px, y: py, value: val, fontSize: fs });
+              fields.push({ label: item.str.trim(), value: val, note: '' });
+            }
           }
         }
 
-        const filled = fields.length;
         showResult({
           title, fields, missing: [],
-          summary: `偵測到 ${filled} 個標籤位置，將以文字疊加方式填入`
+          summary: `偵測到 ${fields.length} 個標籤位置，將以文字疊加方式填入`
         }, profile);
       }
     } catch(e) {
