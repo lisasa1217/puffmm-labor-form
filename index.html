@@ -1085,97 +1085,58 @@
     document.getElementById('mainPanel').innerHTML = `
       <div class="loading-state">
         <div class="spinner"></div>
-        <p>AI 正在分析勞報單欄位<span class="dots"></span></p>
+        <p>正在分析勞報單欄位<span class="dots"></span></p>
       </div>`;
 
-    const prompt = `你是一個專業的台灣勞報單填寫助手。
+    // 本地規則比對，不需要 API
+    const result = (() => {
+      const t = pdfText;
+      const has = (...kws) => kws.some(k => t.includes(k));
 
-以下是從勞報單PDF中擷取的文字內容：
----
-${pdfText.substring(0, 6000)}
----
+      const bankFull = [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ');
 
-以下是填表人的個人資料：
-- 國籍別：${profile.nationality}
-- 居留證／護照號碼：${profile.residency || '（本國籍，不需要）'}
-- 姓名：${profile.name || '（未填）'}
-- 身分證字號：${profile.id || '（未填）'}
-- 出生年月日：${profile.birth || '（未填）'}
-- 戶籍地址：${profile.addr || '（未填）'}
-- 通訊地址：${profile.addr2 || profile.addr || '（同戶籍地址）'}
-- 聯絡電話：${profile.phone || '（未填）'}
-- 銀行名稱：${profile.bank_name || '（未填）'}
-- 分行：${profile.bank_branch || '（未填）'}
-- 銀行代碼：${profile.bank_code || '（未填）'}
-- 銀行帳號：${profile.bank_acc || '（未填）'}
-- 戶名：${profile.bank_holder || '（未填）'}
-- 電子信箱：${profile.email || '（未填）'}
-- 今天日期（民國）：${profile.today_roc}
-- 今天日期（西元）：${profile.today_ad}
+      // 規則定義：keywords 命中就加入欄位
+      const rules = [
+        { kws: ['姓名','收款人','領款人','立據人','受款人','申請人'],   label: '姓名',           value: profile.name },
+        { kws: ['身分證字號','身分證號','統一編號','身份證'],            label: '身分證字號',      value: profile.id },
+        { kws: ['出生年月日','生日','出生日期'],                         label: '出生年月日',      value: profile.birth },
+        { kws: ['國籍別','國籍'],                                        label: '國籍別',          value: profile.nationality },
+        { kws: ['居留證','護照號'],                                       label: '居留證／護照號碼', value: profile.residency || null, note: profile.residency ? '' : '本國籍免填' },
+        { kws: ['戶籍地址','戶籍'],                                      label: '戶籍地址',        value: profile.addr },
+        { kws: ['通訊地址','聯絡地址','住址','地址'],                    label: '通訊地址',        value: profile.addr2 || profile.addr },
+        { kws: ['聯絡電話','電話','手機','行動電話'],                    label: '聯絡電話',        value: profile.phone },
+        { kws: ['電子信箱','email','e-mail','電郵'],                     label: '電子信箱',        value: profile.email },
+        { kws: ['開戶銀行','匯款銀行','銀行名稱','銀行'],               label: '銀行名稱',        value: bankFull },
+        { kws: ['銀行代碼','銀行代號','行庫代號'],                       label: '銀行代碼',        value: profile.bank_code },
+        { kws: ['帳號','銀行帳號','存款帳號','匯款帳號'],               label: '銀行帳號',        value: profile.bank_acc },
+        { kws: ['戶名','帳戶名稱','存款人'],                             label: '戶名',            value: profile.bank_holder },
+        { kws: ['填表日期','立據日期','申請日期','日期'],               label: '填表日期',        value: profile.today_roc },
+        // 廠商填寫欄位
+        { kws: ['服務期間','工作期間','勞務期間'],  label: '服務期間',   value: null, note: '由廠商填寫' },
+        { kws: ['勞務報酬','報酬金額','薪資金額','出席費','費用','金額'], label: '勞務報酬金額', value: null, note: '由廠商填寫' },
+        { kws: ['扣繳','扣繳稅額','預扣稅'],       label: '扣繳稅額',   value: null, note: '由廠商填寫' },
+        { kws: ['實領','實付金額','實際金額'],      label: '實領金額',   value: null, note: '由廠商填寫' },
+      ];
 
-注意事項：
-1. 如果表單有「填表日期」或「立據日期」等欄位，自動帶入今天日期。
-2. 如果有「期間」欄位（服務期間），留給廠商填，不要自動帶入。
-3. 如果有勾選欄位（國籍、付款項目等），根據個人資料判斷應勾哪個選項並說明。
-4. 銀行欄位有些格式是「OO銀行 OO分行」，請組合後填入。
+      // 若 PDF 幾乎讀不到文字，就直接全部列出
+      const fields = t.trim().length < 50
+        ? rules.slice(0, 13).map(r => ({ label: r.label, value: r.value || null, note: r.note || '' }))
+        : rules.filter(r => has(...r.kws)).map(r => ({ label: r.label, value: r.value || null, note: r.note || '' }));
 
-請分析這份勞報單，找出所有需要填寫的欄位，並根據提供的個人資料填入適當內容。
+      // 偵測表單名稱
+      const titleMatch = t.match(/(勞務報酬單|出席費領據|勞報單|鐘點費|講師費|稿費|版稅|勞務費)/);
+      const title = titleMatch ? titleMatch[0] : (fileName || '勞報單');
 
-請用以下 JSON 格式回應，不要有其他文字：
-{
-  "title": "（這份表單的名稱，例如：勞務報酬單、出席費領據等）",
-  "fields": [
-    {
-      "label": "欄位名稱",
-      "value": "填入的值（若無對應資料請填 null）",
-      "note": "備註（可選，例如：需確認金額）"
-    }
-  ],
-  "missing": ["缺少哪些資料（例如：服務項目、金額等需由廠商提供的）"],
-  "summary": "一句話總結（例如：共找到8個欄位，其中6個已填入資料）"
-}`;
+      const filled = fields.filter(f => f.value).length;
+      return {
+        title,
+        fields,
+        missing: ['服務期間', '勞務報酬金額', '扣繳稅額（若有）', '實領金額'],
+        summary: `共找到 ${fields.length} 個欄位，其中 ${filled} 個已帶入個人資料`
+      };
+    })();
 
-    try {
-      const GEMINI_KEY = 'AIzaSyCgWwN9JSY9tPGHMcghqzgKvVFGIfFHzKg';
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1500 }
-        })
-      });
-
-      const data = await resp.json();
-
-      if (data.error) {
-        showError('API 錯誤：' + data.error.message);
-        return;
-      }
-
-      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-      if (!raw) {
-        showError('API 沒有回傳內容，請再試一次。');
-        return;
-      }
-
-      let result;
-      try {
-        const clean = raw.replace(/```json|```/g, '').trim();
-        const start = clean.indexOf('{');
-        const end = clean.lastIndexOf('}');
-        if (start === -1 || end === -1) throw new Error('no json');
-        result = JSON.parse(clean.substring(start, end + 1));
-      } catch(e) {
-        showRawResult(raw);
-        return;
-      }
-
-      showResult(result, profile);
-    } catch(e) {
-      showError('分析失敗：' + e.message);
-    }
+    showResult(result, profile);
   }
 
   function showResult(result, profile) {
