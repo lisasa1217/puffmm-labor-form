@@ -1820,17 +1820,19 @@
           e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div);
         });
       } else {
-        const textDisplayFs = Math.max(8, (p.fontSize || 9) * displayScale * 1.0);
-        // translate(-50%) centers the div at the tap point — matches PDF baseline within half a char height
+        // WYSIWYG: same 0.72 factor as fillCanvas → displayed size = actual PDF size
+        const textDisplayFs = Math.max(7, (p.fontSize || 9) * displayScale * 0.72);
+        // translate(0,-0.85em) aligns CSS baseline to tap point (matches fillText baseline in PDF)
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-          transform:translate(0,-50%);
-          font-size:${textDisplayFs}px;color:rgba(160,0,0,0.95);
+          transform:translate(0,-0.85em);
+          font-size:${textDisplayFs}px;line-height:1;
+          color:rgba(180,0,0,0.92);
           font-family:'PingFang TC','Noto Sans TC',sans-serif;
           white-space:nowrap;cursor:move;
           touch-action:none;user-select:none;
-          border:1.5px solid rgba(220,0,0,0.6);border-radius:3px;
-          background:rgba(255,230,230,0.55);
-          padding:1px 4px;line-height:1.2;`;
+          background:rgba(255,200,200,0.4);
+          padding:2px 3px;border-radius:2px;
+          min-width:22px;min-height:14px;`;
         div.textContent = p.value;
         div.addEventListener('pointerdown', e => { e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div); });
       }
