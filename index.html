@@ -496,14 +496,6 @@
       <div class="section-label">👤 個人資料（自動儲存）</div>
       <div class="profile-form">
         <div class="field-group">
-          <label>國籍別</label>
-          <select id="f_nationality">
-            <option value="本國籍">本國籍</option>
-            <option value="外國籍在台滿183天">外國籍在台滿 183 天</option>
-            <option value="外國籍在台未滿183天">外國籍在台未滿 183 天</option>
-          </select>
-        </div>
-        <div class="field-group">
           <label>居留證／護照號碼（外國籍才填）</label>
           <input type="text" id="f_residency" placeholder="留空表示不需要" />
         </div>
@@ -546,6 +538,10 @@
         <div class="field-group">
           <label>銀行代碼</label>
           <input type="text" id="f_bank_code" placeholder="004（台灣銀行）" />
+        </div>
+        <div class="field-group">
+          <label>分行代碼（可留空）</label>
+          <input type="text" id="f_branch_code" placeholder="0012" />
         </div>
         <div class="field-group">
           <label>銀行帳號</label>
@@ -697,7 +693,7 @@
   })();
 
   // ── Profile: load/save from localStorage ──────────────────
-  const FIELDS = ['nationality','residency','name','id','birth_y','birth_m','birth_d','addr','addr2','phone','bank_name','bank_branch','bank_code','bank_acc','bank_holder','email'];
+  const FIELDS = ['residency','name','id','birth_y','birth_m','birth_d','addr','addr2','phone','bank_name','bank_branch','bank_code','branch_code','bank_acc','bank_holder','email'];
 
   function loadProfile() {
     FIELDS.forEach(k => {
@@ -1064,7 +1060,6 @@
       { kws: ['姓名','name','收款人','領款人','立據人','受款人','申請人'], v: profile.name },
       { kws: ['身分證','idno','id_no','統一編號','身份證'],               v: profile.id },
       { kws: ['出生年月日','出生日期','生日','birthday','birth'],         v: profile.birth },
-      { kws: ['國籍'],                                                    v: profile.nationality },
       { kws: ['居留證','護照','passport'],                                v: profile.residency },
       { kws: ['戶籍地址','戶籍'],                                         v: profile.addr },
       { kws: ['通訊地址','聯絡地址','住址','address'],                    v: profile.addr2 || profile.addr },
@@ -1088,7 +1083,6 @@
     const bd = document.getElementById('f_birth_d').value;
     const now = new Date();
     return {
-      nationality: document.getElementById('f_nationality').value,
       residency:   document.getElementById('f_residency').value,
       name:        document.getElementById('f_name').value,
       id:          document.getElementById('f_id').value,
@@ -1099,6 +1093,7 @@
       bank_name:   document.getElementById('f_bank_name').value,
       bank_branch: document.getElementById('f_bank_branch').value,
       bank_code:   document.getElementById('f_bank_code').value,
+      branch_code: document.getElementById('f_branch_code').value,
       bank_acc:    document.getElementById('f_bank_acc').value,
       bank_holder: document.getElementById('f_bank_holder').value || document.getElementById('f_name').value,
       email:       document.getElementById('f_email').value,
@@ -1593,8 +1588,10 @@
       { key: 'addr2',       label: '通訊地址',    value: profile.addr2 || profile.addr },
       { key: 'phone',       label: '電話',        value: profile.phone },
       { key: 'email',       label: 'Email',       value: profile.email },
-      { key: 'bank_name',   label: '銀行/分行',   value: [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ') },
+      { key: 'bank_name',   label: '銀行名稱',    value: profile.bank_name },
+      { key: 'bank_branch', label: '分行',        value: profile.bank_branch },
       { key: 'bank_code',   label: '銀行代碼',    value: profile.bank_code },
+      { key: 'branch_code', label: '分行代碼',    value: profile.branch_code },
       { key: 'bank_acc',    label: '帳號',        value: profile.bank_acc },
       { key: 'bank_holder', label: '戶名',        value: profile.bank_holder },
       ...(tm ? [
@@ -1639,7 +1636,15 @@
           點選欄位 → 點 PDF 放置 ｜ 紅框可拖動移位 ｜ 右下角拖動調整大小 ｜ 雙擊紅框移除
         </div>
         <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
-          ${chipHTML}${imgChipHTML ? '<div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>' + imgChipHTML : ''}
+          ${chipHTML}
+          <div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>
+          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('✓')}" data-label="打勾 ✓" data-isimage="false" data-fontsize="16"
+            onclick="selectEditorChip(this)"
+            style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#f0fff4;cursor:pointer;font-size:18px;font-weight:700;color:#1a7a3c;">✓</button>
+          <button class="ed-chip" data-key="check_x" data-value="${encodeURIComponent('✗')}" data-label="叉叉 ✗" data-isimage="false" data-fontsize="16"
+            onclick="selectEditorChip(this)"
+            style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#fff5f5;cursor:pointer;font-size:18px;font-weight:700;color:#c0392b;">✗</button>
+          ${imgChipHTML ? '<div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>' + imgChipHTML : ''}
         </div>
         <div style="position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#ccc;">
           <canvas id="editorCanvas" style="display:block;width:100%;"></canvas>
@@ -1718,6 +1723,7 @@
       label: btn.dataset.label,
       isImage: btn.dataset.isimage === 'true',
       storageKey: btn.dataset.storagekey || null,
+      fontSize: btn.dataset.fontsize ? parseInt(btn.dataset.fontsize) : 12,
     };
     document.querySelectorAll('.ed-chip').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -1799,7 +1805,7 @@
         const imgH = (p.nh || 0.14) * vp.height;
         imagePlacements.push({ page: p.page, x: pdfX, y: pdfY - imgH, width: imgW, height: imgH, storageKey: p.storageKey });
       } else {
-        canvasPlacements.push({ page: p.page, x: pdfX, y: pdfY, value: p.value, fontSize: 12 });
+        canvasPlacements.push({ page: p.page, x: pdfX, y: pdfY, value: p.value, fontSize: p.fontSize || 12 });
       }
     }
     fillMode = 'canvas';
