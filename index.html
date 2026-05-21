@@ -1640,6 +1640,22 @@
   let activeChipData = null;
   let _resizingId = null, _resizeOx, _resizeOy, _resizeOw, _resizeOh;
   let _movingId = null, _moveOx, _moveOy, _moveOnx, _moveOny;
+  let _snapEnabled = true;
+
+  function toggleSnap() {
+    _snapEnabled = !_snapEnabled;
+    const btn = document.getElementById('snapToggleBtn');
+    if (btn) btn.textContent = _snapEnabled ? '🔒 對齊吸附：開' : '🔓 對齊吸附：關';
+    if (btn) btn.style.background = _snapEnabled ? '#dce8ff' : '#f5f5f5';
+    if (btn) btn.style.color = _snapEnabled ? '#4361ee' : '#888';
+    _hideGuideLines();
+  }
+
+  function _evPos(e) {
+    if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
 
   async function openManualEditor() {
     if (!originalArrayBuffer) { alert('請先上傳 PDF'); return; }
@@ -1714,23 +1730,27 @@
             </button>
           </div>
         </div>
-        <div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.8;">
-          點選欄位 → 點 PDF 放置 ｜ 藍線出現時會自動對齊 ｜ 紅框可拖動移位 ｜ 右下角拖動調整大小 ｜ 雙擊紅框移除
+        <div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.8;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span>點選欄位 → 點 PDF 放置 ｜ 紅框拖動移位 ｜ 右下角拖動縮放 ｜ 雙擊移除</span>
+          <button id="snapToggleBtn" onclick="toggleSnap()"
+            style="padding:4px 12px;border-radius:14px;border:1.5px solid #4361ee;background:#dce8ff;color:#4361ee;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            🔒 對齊吸附：開
+          </button>
         </div>
         <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
           ${chipHTML}
           <div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>
-          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('✓')}" data-label="打勾 ✓" data-isimage="false" data-fontsize="16"
+          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('✓')}" data-label="打勾 ✓" data-isimage="false" data-fontsize="10"
             onclick="selectEditorChip(this)"
             style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#f0fff4;cursor:pointer;font-size:18px;font-weight:700;color:#1a7a3c;">✓</button>
-          <button class="ed-chip" data-key="check_x" data-value="${encodeURIComponent('✗')}" data-label="叉叉 ✗" data-isimage="false" data-fontsize="16"
+          <button class="ed-chip" data-key="check_x" data-value="${encodeURIComponent('✗')}" data-label="叉叉 ✗" data-isimage="false" data-fontsize="10"
             onclick="selectEditorChip(this)"
             style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#fff5f5;cursor:pointer;font-size:18px;font-weight:700;color:#c0392b;">✗</button>
           ${imgChipHTML ? '<div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>' + imgChipHTML : ''}
         </div>
         <div style="position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#ccc;">
           <canvas id="editorCanvas" style="display:block;width:100%;"></canvas>
-          <div id="editorOverlay" style="position:absolute;inset:0;" onclick="handleEditorClick(event)"></div>
+          <div id="editorOverlay" style="position:absolute;inset:0;" onclick="handleEditorClick(event)" ontouchend="handleEditorTouch(event)"></div>
         </div>
         <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
           <button onclick="editorChangePage(-1)" style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;cursor:pointer;background:#fff;">← 上一頁</button>
@@ -1758,7 +1778,14 @@
   function refreshOverlayDivs() {
     const overlay = document.getElementById('editorOverlay');
     if (!overlay) return;
+    // Keep guide div if present
+    const guide = document.getElementById('editorGuides');
     overlay.innerHTML = '';
+    if (guide) overlay.appendChild(guide);
+
+    const overlayW = overlay.getBoundingClientRect().width || 400;
+    const labelFs = Math.max(8, Math.min(11, overlayW * 0.022)) + 'px';
+
     for (const p of editorPlacements.filter(p => p.page === editorPage)) {
       const div = document.createElement('div');
       div.id = 'pldiv_' + p.id;
@@ -1767,33 +1794,44 @@
         const imgData = localStorage.getItem(p.storageKey);
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
           width:${(p.nw||0.22)*100}%;height:${(p.nh||0.14)*100}%;
-          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:hidden;cursor:move;`;
+          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:hidden;touch-action:none;`;
         if (imgData) {
           const img = document.createElement('img');
           img.src = imgData;
           img.style.cssText = 'width:100%;height:100%;object-fit:contain;pointer-events:none;display:block;';
           div.appendChild(img);
         }
-        // label
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'position:absolute;top:1px;left:2px;font-size:9px;color:rgba(200,0,0,0.9);background:rgba(255,255,255,0.7);padding:0 2px;pointer-events:none;border-radius:2px;';
+        lbl.style.cssText = `position:absolute;top:1px;left:2px;font-size:${labelFs};color:rgba(200,0,0,0.9);background:rgba(255,255,255,0.75);padding:0 2px;pointer-events:none;border-radius:2px;`;
         lbl.textContent = p.label;
         div.appendChild(lbl);
-        // resize handle
+        // resize handle — larger for touch
         const rh = document.createElement('div');
-        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:14px;height:14px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:2px 0 0 0;';
-        rh.onmousedown = e => { e.stopPropagation(); e.preventDefault(); startEditorResize(e, p.id); };
+        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:22px;height:22px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:3px 0 0 0;touch-action:none;display:flex;align-items:center;justify-content:center;';
+        rh.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="white"><path d="M9 1L1 9M5 1L1 5M9 5L5 9" stroke="white" stroke-width="1.5"/></svg>';
+        const startResize = e => { e.stopPropagation(); e.preventDefault(); startEditorResize(e, p.id); };
+        rh.addEventListener('mousedown', startResize);
+        rh.addEventListener('touchstart', startResize, { passive: false });
         div.appendChild(rh);
       } else {
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
           transform:translate(0,-50%);background:rgba(200,0,0,0.85);color:#fff;
-          font-size:11px;padding:2px 7px;border-radius:4px;cursor:move;
-          white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);pointer-events:auto;`;
+          font-size:${labelFs};padding:2px 6px;border-radius:4px;cursor:move;
+          white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);pointer-events:auto;touch-action:none;`;
         div.textContent = p.value;
       }
 
-      div.ondblclick = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
-      div.onmousedown = e => { if (e.target === div || (p.isImage && e.target.tagName === 'IMG')) startEditorMove(e, p.id); };
+      const removeFn = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
+      div.ondblclick = removeFn;
+      // Long-press to remove on touch
+      let _longPressTimer;
+      div.addEventListener('touchstart', e => { _longPressTimer = setTimeout(() => removeFn(e), 600); }, { passive: true });
+      div.addEventListener('touchend', () => clearTimeout(_longPressTimer));
+      div.addEventListener('touchmove', () => clearTimeout(_longPressTimer), { passive: true });
+
+      const startMoveFn = e => { if (e.target === div || (p.isImage && (e.target.tagName === 'IMG'))) { e.preventDefault(); startEditorMove(e, p.id); } };
+      div.addEventListener('mousedown', startMoveFn);
+      div.addEventListener('touchstart', startMoveFn, { passive: false });
       overlay.appendChild(div);
     }
   }
@@ -1823,39 +1861,60 @@
     refreshOverlayDivs();
   }
 
+  function handleEditorTouch(event) {
+    if (!activeChipData || _movingId || _resizingId) return;
+    event.preventDefault();
+    const t = event.changedTouches[0];
+    const overlay = document.getElementById('editorOverlay');
+    const rect = overlay.getBoundingClientRect();
+    const nx = (t.clientX - rect.left) / rect.width;
+    const ny = (t.clientY - rect.top) / rect.height;
+    editorPlacements.push({ id: 'pl_' + Date.now(), page: editorPage, nx, ny, nw: 0.22, nh: 0.14, ...activeChipData });
+    activeChipData = null;
+    document.querySelectorAll('.ed-chip').forEach(b => b.classList.remove('active'));
+    refreshOverlayDivs();
+  }
+
   function startEditorMove(e, id) {
-    e.preventDefault(); e.stopPropagation();
+    try { e.preventDefault(); e.stopPropagation(); } catch(_){}
     _movingId = id;
     const overlay = document.getElementById('editorOverlay');
     const rect = overlay.getBoundingClientRect();
     const p = editorPlacements.find(x => x.id === id);
-    _moveOx = e.clientX; _moveOy = e.clientY;
+    const startPos = _evPos(e);
+    _moveOx = startPos.x; _moveOy = startPos.y;
     _moveOnx = p.nx; _moveOny = p.ny;
     const onMove = ev => {
       if (!_movingId) return;
-      const dx = (ev.clientX - _moveOx) / rect.width;
-      const dy = (ev.clientY - _moveOy) / rect.height;
+      if (ev.cancelable) ev.preventDefault();
+      const pos = _evPos(ev);
+      const dx = (pos.x - _moveOx) / rect.width;
+      const dy = (pos.y - _moveOy) / rect.height;
       let nx = Math.max(0, Math.min(1, _moveOnx + dx));
       let ny = Math.max(0, Math.min(1, _moveOny + dy));
-      // Snap to other placements
-      const snap = _editorSnapPoints(id);
-      const THRESH = 0.012;
       let snappedX = null, snappedY = null;
-      for (const sx of snap.xs) { if (Math.abs(nx - sx) < THRESH) { nx = sx; snappedX = sx; break; } }
-      for (const sy of snap.ys) { if (Math.abs(ny - sy) < THRESH) { ny = sy; snappedY = sy; break; } }
+      if (_snapEnabled) {
+        const snap = _editorSnapPoints(id);
+        const THRESH = 0.012;
+        for (const sx of snap.xs) { if (Math.abs(nx - sx) < THRESH) { nx = sx; snappedX = sx; break; } }
+        for (const sy of snap.ys) { if (Math.abs(ny - sy) < THRESH) { ny = sy; snappedY = sy; break; } }
+      }
       p.nx = nx; p.ny = ny;
       const div = document.getElementById('pldiv_' + id);
       if (div) { div.style.left = nx*100+'%'; div.style.top = ny*100+'%'; }
       _showGuideLines(snappedX, snappedY);
     };
     const onUp = () => {
-      _movingId = null;
-      _hideGuideLines();
+      _movingId = null; _hideGuideLines();
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
   }
 
   function _editorSnapPoints(excludeId) {
@@ -1892,25 +1951,36 @@
   }
 
   function startEditorResize(e, id) {
-    e.preventDefault();
+    try { e.preventDefault(); e.stopPropagation(); } catch(_){}
     _resizingId = id;
     const overlay = document.getElementById('editorOverlay');
     const rect = overlay.getBoundingClientRect();
     const p = editorPlacements.find(x => x.id === id);
-    _resizeOx = e.clientX; _resizeOy = e.clientY;
+    const startPos = _evPos(e);
+    _resizeOx = startPos.x; _resizeOy = startPos.y;
     _resizeOw = p.nw || 0.22; _resizeOh = p.nh || 0.14;
     const onMove = ev => {
       if (!_resizingId) return;
-      const dx = (ev.clientX - _resizeOx) / rect.width;
-      const dy = (ev.clientY - _resizeOy) / rect.height;
+      if (ev.cancelable) ev.preventDefault();
+      const pos = _evPos(ev);
+      const dx = (pos.x - _resizeOx) / rect.width;
+      const dy = (pos.y - _resizeOy) / rect.height;
       p.nw = Math.max(0.03, _resizeOw + dx);
       p.nh = Math.max(0.02, _resizeOh + dy);
       const div = document.getElementById('pldiv_' + id);
       if (div) { div.style.width = p.nw*100+'%'; div.style.height = p.nh*100+'%'; }
     };
-    const onUp = () => { _resizingId = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = () => {
+      _resizingId = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
   }
 
   async function editorChangePage(dir) {
