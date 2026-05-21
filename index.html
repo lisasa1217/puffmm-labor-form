@@ -1167,9 +1167,9 @@
         ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
       }
 
-      // Draw ID card images in their detected paste areas
+      // Draw images in their placement areas
       for (const ip of imagePlacements.filter(p => p.page === pageNum)) {
-        const data = localStorage.getItem('lbs_img_' + ip.key);
+        const data = localStorage.getItem(ip.storageKey || ('lbs_img_' + ip.key));
         if (!data) continue;
         const imgEl = new Image();
         await new Promise(res => { imgEl.onload = res; imgEl.src = data; });
@@ -1224,7 +1224,7 @@
 
     // Image overlays
     for (const ip of imagePlacements.filter(p => p.page === 1)) {
-      const data = localStorage.getItem('lbs_img_' + ip.key);
+      const data = localStorage.getItem(ip.storageKey || ('lbs_img_' + ip.key));
       if (!data) continue;
       const imgEl = new Image();
       await new Promise(res => { imgEl.onload = res; imgEl.src = data; });
@@ -1514,71 +1514,86 @@
   let editorPdf = null;
   let editorPage = 1;
   let editorScale = 2;
-  let editorPlacements = [];  // { id, page, nx, ny, value, label, key, isImage }
+  let editorPlacements = []; // { id, page, nx, ny, nw, nh, value, label, key, isImage, storageKey }
   let activeChipData = null;
+  let _resizingId = null, _resizeOx, _resizeOy, _resizeOw, _resizeOh;
+  let _movingId = null, _moveOx, _moveOy, _moveOnx, _moveOny;
 
   async function openManualEditor() {
     if (!originalArrayBuffer) { alert('請先上傳 PDF'); return; }
     editorPdf = await pdfjsLib.getDocument({ data: originalArrayBuffer.slice(0) }).promise;
-    editorPage = 1;
-    editorPlacements = [];
-    activeChipData = null;
+    editorPage = 1; editorPlacements = []; activeChipData = null;
 
     const profile = getProfile();
+
+    // Split birth date into components
+    const bm = (profile.birth || '').match(/(\d+)年(\d+)月(\d+)日/);
+    const tm = (profile.today_roc || '').match(/(\d+)年(\d+)月(\d+)日/);
+
     const chips = [
-      { key: 'name',        label: '姓名',     value: profile.name },
-      { key: 'id',          label: '身分證字號', value: profile.id },
-      { key: 'birth',       label: '出生年月日', value: profile.birth },
-      { key: 'addr',        label: '戶籍地址',  value: profile.addr },
-      { key: 'addr2',       label: '通訊地址',  value: profile.addr2 || profile.addr },
-      { key: 'phone',       label: '電話',     value: profile.phone },
-      { key: 'email',       label: 'Email',    value: profile.email },
-      { key: 'bank_name',   label: '銀行/分行', value: [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ') },
-      { key: 'bank_code',   label: '銀行代碼',  value: profile.bank_code },
-      { key: 'bank_acc',    label: '帳號',     value: profile.bank_acc },
-      { key: 'bank_holder', label: '戶名',     value: profile.bank_holder },
-      { key: 'today_roc',   label: '日期（民國）',value: profile.today_roc },
+      { key: 'name',        label: '姓名',      value: profile.name },
+      { key: 'id',          label: '身分證字號',  value: profile.id },
+      ...(bm ? [
+        { key: 'birth_y', label: '出生年（民國）', value: bm[1] },
+        { key: 'birth_m', label: '出生月',        value: bm[2] },
+        { key: 'birth_d', label: '出生日',        value: bm[3] },
+      ] : [{ key: 'birth', label: '出生年月日', value: profile.birth }]),
+      { key: 'addr',        label: '戶籍地址',    value: profile.addr },
+      { key: 'addr2',       label: '通訊地址',    value: profile.addr2 || profile.addr },
+      { key: 'phone',       label: '電話',        value: profile.phone },
+      { key: 'email',       label: 'Email',       value: profile.email },
+      { key: 'bank_name',   label: '銀行/分行',   value: [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ') },
+      { key: 'bank_code',   label: '銀行代碼',    value: profile.bank_code },
+      { key: 'bank_acc',    label: '帳號',        value: profile.bank_acc },
+      { key: 'bank_holder', label: '戶名',        value: profile.bank_holder },
+      ...(tm ? [
+        { key: 'today_y', label: '年（民國）', value: tm[1] },
+        { key: 'today_m', label: '月',         value: tm[2] },
+        { key: 'today_d', label: '日',         value: tm[3] },
+      ] : [{ key: 'today_roc', label: '日期（民國）', value: profile.today_roc }]),
     ].filter(f => f.value);
 
     const imgChips = [
-      { key: 'img_idFront', label: '身分證正面', isImage: true },
-      { key: 'img_idBack',  label: '身分證反面', isImage: true },
-      { key: 'img_bank',    label: '存摺封面',  isImage: true },
-    ].filter(c => localStorage.getItem('lbs_' + c.key));
+      { key: 'idFront', label: '身分證正面', storageKey: 'lbs_img_idFront' },
+      { key: 'idBack',  label: '身分證反面', storageKey: 'lbs_img_idBack' },
+      { key: 'bank',    label: '存摺封面',   storageKey: 'lbs_img_bank' },
+      { key: 'stamp',   label: '印章',       storageKey: 'lbs_stamp' },
+      { key: 'sig',     label: '簽名',       storageKey: 'lbs_sig' },
+    ].filter(c => localStorage.getItem(c.storageKey));
+
+    const chipHTML = chips.map(c => `
+      <button class="ed-chip" data-key="${c.key}" data-value="${encodeURIComponent(c.value)}" data-label="${c.label}" data-isimage="false"
+        onclick="selectEditorChip(this)"
+        style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#fff;cursor:pointer;font-size:12px;text-align:left;line-height:1.4;white-space:nowrap;">
+        <span style="color:#888;display:block;font-size:10px;">${c.label}</span>${c.value}
+      </button>`).join('');
+
+    const imgChipHTML = imgChips.map(c => `
+      <button class="ed-chip" data-key="${c.key}" data-label="${c.label}" data-isimage="true" data-storagekey="${c.storageKey}"
+        onclick="selectEditorChip(this)"
+        style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#e8f0fe;cursor:pointer;font-size:12px;">
+        📷 ${c.label}
+      </button>`).join('');
 
     document.getElementById('mainPanel').innerHTML = `
+      <style>
+        .ed-chip.active { border-color:#4361ee!important; background:#dce8ff!important; }
+      </style>
       <div style="display:flex;flex-direction:column;gap:10px;">
-
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
           <div style="font-size:15px;font-weight:600;">手動定位模式</div>
           <button class="analyze-btn" style="width:auto;padding:10px 22px;font-size:14px;" onclick="downloadFromEditor()">⬇ 下載填好的 PDF</button>
         </div>
-
-        <div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.7;">
-          1. 點選下方欄位標籤（選到後會變藍色）<br>
-          2. 在 PDF 上點擊你要放的位置<br>
-          3. 紅色標籤可再次點擊移除<br>
-          4. 確認無誤後按右上角「下載」
+        <div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.8;">
+          點選欄位 → 點 PDF 放置 ｜ 紅框可拖動移位 ｜ 右下角拖動調整大小 ｜ 雙擊紅框移除
         </div>
-
         <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
-          ${chips.map(c => `
-            <button id="chip_${c.key}" onclick="selectEditorChip('${c.key}','${c.value.replace(/'/g,"\\'").replace(/"/g,"&quot;")}','${c.label}',false)"
-              style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#fff;cursor:pointer;font-size:12px;text-align:left;line-height:1.4;">
-              <span style="color:#888;display:block;font-size:10px;">${c.label}</span>${c.value}
-            </button>`).join('')}
-          ${imgChips.map(c => `
-            <button id="chip_${c.key}" onclick="selectEditorChip('${c.key}',null,'${c.label}',true)"
-              style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#e8f0fe;cursor:pointer;font-size:12px;">
-              📷 ${c.label}
-            </button>`).join('')}
+          ${chipHTML}${imgChipHTML ? '<div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>' + imgChipHTML : ''}
         </div>
-
-        <div style="position:relative;overflow:auto;border:1px solid #ddd;border-radius:8px;background:#eee;">
-          <canvas id="editorCanvas" style="display:block;"></canvas>
-          <div id="editorOverlay" style="position:absolute;inset:0;cursor:crosshair;" onclick="handleEditorClick(event)"></div>
+        <div style="position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#ccc;">
+          <canvas id="editorCanvas" style="display:block;width:100%;"></canvas>
+          <div id="editorOverlay" style="position:absolute;inset:0;" onclick="handleEditorClick(event)"></div>
         </div>
-
         <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
           <button onclick="editorChangePage(-1)" style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;cursor:pointer;background:#fff;">← 上一頁</button>
           <span id="editorPageInfo" style="font-size:13px;color:#888;"></span>
@@ -1586,7 +1601,7 @@
         </div>
       </div>`;
 
-    await renderEditorPage(editorPage);
+    await renderEditorPage(1);
   }
 
   async function renderEditorPage(pageNum) {
@@ -1597,9 +1612,7 @@
     if (!canvas) return;
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    canvas.style.width = '100%';
-    const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     document.getElementById('editorPageInfo').textContent = `第 ${pageNum} / ${editorPdf.numPages} 頁`;
     refreshOverlayDivs();
   }
@@ -1610,44 +1623,109 @@
     overlay.innerHTML = '';
     for (const p of editorPlacements.filter(p => p.page === editorPage)) {
       const div = document.createElement('div');
-      div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-        transform:translate(0,-50%);background:rgba(200,0,0,0.85);color:#fff;
-        font-size:11px;padding:2px 7px;border-radius:4px;cursor:pointer;
-        white-space:nowrap;pointer-events:auto;max-width:180px;overflow:hidden;text-overflow:ellipsis;
-        box-shadow:0 1px 4px rgba(0,0,0,0.3);`;
-      div.textContent = p.isImage ? `📷 ${p.label}` : p.value;
-      div.title = '點擊移除';
-      div.onclick = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
+      div.id = 'pldiv_' + p.id;
+
+      if (p.isImage) {
+        const imgData = localStorage.getItem(p.storageKey);
+        div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
+          width:${(p.nw||0.22)*100}%;height:${(p.nh||0.14)*100}%;
+          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:hidden;cursor:move;`;
+        if (imgData) {
+          const img = document.createElement('img');
+          img.src = imgData;
+          img.style.cssText = 'width:100%;height:100%;object-fit:contain;pointer-events:none;display:block;';
+          div.appendChild(img);
+        }
+        // label
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'position:absolute;top:1px;left:2px;font-size:9px;color:rgba(200,0,0,0.9);background:rgba(255,255,255,0.7);padding:0 2px;pointer-events:none;border-radius:2px;';
+        lbl.textContent = p.label;
+        div.appendChild(lbl);
+        // resize handle
+        const rh = document.createElement('div');
+        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:14px;height:14px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:2px 0 0 0;';
+        rh.onmousedown = e => { e.stopPropagation(); e.preventDefault(); startEditorResize(e, p.id); };
+        div.appendChild(rh);
+      } else {
+        div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
+          transform:translate(0,-50%);background:rgba(200,0,0,0.85);color:#fff;
+          font-size:11px;padding:2px 7px;border-radius:4px;cursor:move;
+          white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);pointer-events:auto;`;
+        div.textContent = p.value;
+      }
+
+      div.ondblclick = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
+      div.onmousedown = e => { if (e.target === div || (p.isImage && e.target.tagName === 'IMG')) startEditorMove(e, p.id); };
       overlay.appendChild(div);
     }
   }
 
-  function selectEditorChip(key, value, label, isImage) {
-    activeChipData = { key, value, label, isImage };
-    document.querySelectorAll('#editorChipBar button').forEach(b => {
-      b.style.borderColor = '#d0d5dd';
-      b.style.background = b.id === 'chip_' + key ? '#e0eaff' : (b.id.includes('img_') ? '#e8f0fe' : '#fff');
-    });
-    const btn = document.getElementById('chip_' + key);
-    if (btn) btn.style.borderColor = '#4361ee';
-    document.getElementById('editorOverlay').style.cursor = 'crosshair';
+  function selectEditorChip(btn) {
+    activeChipData = {
+      key: btn.dataset.key,
+      value: btn.dataset.value ? decodeURIComponent(btn.dataset.value) : null,
+      label: btn.dataset.label,
+      isImage: btn.dataset.isimage === 'true',
+      storageKey: btn.dataset.storagekey || null,
+    };
+    document.querySelectorAll('.ed-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
   }
 
   function handleEditorClick(event) {
-    if (!activeChipData) return;
+    if (!activeChipData || _movingId || _resizingId) return;
     const overlay = document.getElementById('editorOverlay');
     const rect = overlay.getBoundingClientRect();
     const nx = (event.clientX - rect.left) / rect.width;
     const ny = (event.clientY - rect.top) / rect.height;
-    const id = 'pl_' + Date.now();
-    editorPlacements.push({ id, page: editorPage, nx, ny, ...activeChipData });
-    // Deselect chip after placing
+    editorPlacements.push({ id: 'pl_' + Date.now(), page: editorPage, nx, ny, nw: 0.22, nh: 0.14, ...activeChipData });
     activeChipData = null;
-    document.querySelectorAll('#editorChipBar button').forEach(b => {
-      b.style.borderColor = '#d0d5dd';
-      b.style.background = b.id.includes('img_') ? '#e8f0fe' : '#fff';
-    });
+    document.querySelectorAll('.ed-chip').forEach(b => b.classList.remove('active'));
     refreshOverlayDivs();
+  }
+
+  function startEditorMove(e, id) {
+    e.preventDefault(); e.stopPropagation();
+    _movingId = id;
+    const overlay = document.getElementById('editorOverlay');
+    const rect = overlay.getBoundingClientRect();
+    const p = editorPlacements.find(x => x.id === id);
+    _moveOx = e.clientX; _moveOy = e.clientY;
+    _moveOnx = p.nx; _moveOny = p.ny;
+    const onMove = ev => {
+      if (!_movingId) return;
+      const dx = (ev.clientX - _moveOx) / rect.width;
+      const dy = (ev.clientY - _moveOy) / rect.height;
+      p.nx = Math.max(0, Math.min(1, _moveOnx + dx));
+      p.ny = Math.max(0, Math.min(1, _moveOny + dy));
+      const div = document.getElementById('pldiv_' + id);
+      if (div) { div.style.left = p.nx*100+'%'; div.style.top = p.ny*100+'%'; }
+    };
+    const onUp = () => { _movingId = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function startEditorResize(e, id) {
+    e.preventDefault();
+    _resizingId = id;
+    const overlay = document.getElementById('editorOverlay');
+    const rect = overlay.getBoundingClientRect();
+    const p = editorPlacements.find(x => x.id === id);
+    _resizeOx = e.clientX; _resizeOy = e.clientY;
+    _resizeOw = p.nw || 0.22; _resizeOh = p.nh || 0.14;
+    const onMove = ev => {
+      if (!_resizingId) return;
+      const dx = (ev.clientX - _resizeOx) / rect.width;
+      const dy = (ev.clientY - _resizeOy) / rect.height;
+      p.nw = Math.max(0.03, _resizeOw + dx);
+      p.nh = Math.max(0.02, _resizeOh + dy);
+      const div = document.getElementById('pldiv_' + id);
+      if (div) { div.style.width = p.nw*100+'%'; div.style.height = p.nh*100+'%'; }
+    };
+    const onUp = () => { _resizingId = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }
 
   async function editorChangePage(dir) {
@@ -1659,16 +1737,16 @@
 
   async function downloadFromEditor() {
     if (!editorPdf || editorPlacements.length === 0) { alert('請先放置至少一個欄位'); return; }
-    canvasPlacements = [];
-    imagePlacements = [];
+    canvasPlacements = []; imagePlacements = [];
     for (const p of editorPlacements) {
       const page = await editorPdf.getPage(p.page);
       const vp = page.getViewport({ scale: 1 });
       const pdfX = p.nx * vp.width;
       const pdfY = (1 - p.ny) * vp.height;
       if (p.isImage) {
-        const imgW = 140, imgH = 95;
-        imagePlacements.push({ page: p.page, x: pdfX - imgW / 2, y: pdfY - imgH / 2, width: imgW, height: imgH, key: p.key.replace('img_', '') });
+        const imgW = (p.nw || 0.22) * vp.width;
+        const imgH = (p.nh || 0.14) * vp.height;
+        imagePlacements.push({ page: p.page, x: pdfX, y: pdfY - imgH, width: imgW, height: imgH, storageKey: p.storageKey });
       } else {
         canvasPlacements.push({ page: p.page, x: pdfX, y: pdfY, value: p.value, fontSize: 12 });
       }
