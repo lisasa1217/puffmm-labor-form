@@ -1794,15 +1794,19 @@
 
       if (p.isImage) {
         const imgData = localStorage.getItem(p.storageKey);
+        // overflow:visible so × button outside the box isn't clipped
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
           width:${(p.nw||0.22)*100}%;height:${(p.nh||0.14)*100}%;
-          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:hidden;
+          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:visible;
           cursor:move;touch-action:none;user-select:none;`;
         if (imgData) {
+          const imgWrap = document.createElement('div');
+          imgWrap.style.cssText = 'position:absolute;inset:0;overflow:hidden;';
           const img = document.createElement('img');
           img.src = imgData;
           img.style.cssText = 'width:100%;height:100%;object-fit:contain;pointer-events:none;display:block;';
-          div.appendChild(img);
+          imgWrap.appendChild(img);
+          div.appendChild(imgWrap);
         }
         const lbl = document.createElement('div');
         lbl.style.cssText = `position:absolute;top:1px;left:2px;font-size:${labelFs};color:rgba(200,0,0,0.9);background:rgba(255,255,255,0.75);padding:0 2px;pointer-events:none;border-radius:2px;`;
@@ -1810,7 +1814,7 @@
         div.appendChild(lbl);
         // resize handle
         const rh = document.createElement('div');
-        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:26px;height:26px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:3px 0 0 0;touch-action:none;display:flex;align-items:center;justify-content:center;';
+        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:26px;height:26px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:3px 0 0 0;touch-action:none;display:flex;align-items:center;justify-content:center;z-index:2;';
         rh.innerHTML = '<svg width="11" height="11" viewBox="0 0 10 10"><path d="M9 1L1 9M5 1L1 5M9 5L5 9" stroke="white" stroke-width="1.8" fill="none"/></svg>';
         rh.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); rh.setPointerCapture(e.pointerId); startEditorResize(e, p.id); });
         div.appendChild(rh);
@@ -1820,11 +1824,13 @@
           e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div);
         });
       } else {
-        // WYSIWYG: same 0.72 factor as fillCanvas → displayed size = actual PDF size
-        const textDisplayFs = Math.max(7, (p.fontSize || 9) * displayScale * 0.72);
-        // translate(0,-0.85em) aligns CSS baseline to tap point (matches fillText baseline in PDF)
+        // Compute true WYSIWYG size first; clamp only for display
+        const wysiwygFs = (p.fontSize || 9) * displayScale * 0.72;
+        const textDisplayFs = Math.max(7, wysiwygFs);
+        // Shift by actual WYSIWYG baseline (not clamped size) so position matches PDF on all screen sizes
+        const baselineShift = Math.max(6, wysiwygFs * 0.85);
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-          transform:translate(0,-0.85em);
+          transform:translate(0,-${baselineShift}px);
           font-size:${textDisplayFs}px;line-height:1;
           color:rgba(180,0,0,0.92);
           font-family:'PingFang TC','Noto Sans TC',sans-serif;
@@ -1837,11 +1843,18 @@
         div.addEventListener('pointerdown', e => { e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div); });
       }
 
+      // × delete button — visible on mobile, no dblclick needed
+      const delBtn = document.createElement('div');
+      delBtn.textContent = '×';
+      delBtn.style.cssText = 'position:absolute;top:-10px;right:-10px;width:22px;height:22px;background:rgba(200,0,0,0.9);color:#fff;border-radius:50%;font-size:15px;line-height:22px;text-align:center;cursor:pointer;touch-action:manipulation;z-index:10;user-select:none;';
+      delBtn.addEventListener('pointerdown', e => {
+        e.stopPropagation(); e.preventDefault();
+        editorPlacements = editorPlacements.filter(x => x.id !== p.id);
+        refreshOverlayDivs();
+      });
+      div.appendChild(delBtn);
+
       div.ondblclick = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
-      let _lpt;
-      div.addEventListener('pointerdown', () => { _lpt = setTimeout(() => { editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); }, 700); });
-      div.addEventListener('pointermove', () => clearTimeout(_lpt));
-      div.addEventListener('pointerup', () => clearTimeout(_lpt));
       overlay.appendChild(div);
     }
   }
