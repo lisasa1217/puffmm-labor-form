@@ -1846,7 +1846,7 @@
       // × delete button — visible on mobile, no dblclick needed
       const delBtn = document.createElement('div');
       delBtn.textContent = '×';
-      delBtn.style.cssText = 'position:absolute;top:-10px;right:-10px;width:22px;height:22px;background:rgba(200,0,0,0.9);color:#fff;border-radius:50%;font-size:15px;line-height:22px;text-align:center;cursor:pointer;touch-action:manipulation;z-index:10;user-select:none;';
+      delBtn.style.cssText = 'position:absolute;top:-7px;right:-7px;width:14px;height:14px;background:rgba(200,0,0,0.85);color:#fff;border-radius:50%;font-size:10px;line-height:14px;text-align:center;cursor:pointer;touch-action:manipulation;z-index:10;user-select:none;';
       delBtn.addEventListener('pointerdown', e => {
         e.stopPropagation(); e.preventDefault();
         editorPlacements = editorPlacements.filter(x => x.id !== p.id);
