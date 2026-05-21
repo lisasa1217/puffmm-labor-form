@@ -1286,10 +1286,10 @@
         const fs = Math.max(p.fontSize, 7) * scale * 0.72;
         ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
         ctx.fillStyle = '#000';
-        const isCheck = (p.value === '✓' || p.value === '✗');
-        if (isCheck) ctx.textBaseline = 'middle';
+        const useMiddle = p.center || p.value === '✓' || p.value === '✗';
+        if (useMiddle) ctx.textBaseline = 'middle';
         ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
-        if (isCheck) ctx.textBaseline = 'alphabetic';
+        if (useMiddle) ctx.textBaseline = 'alphabetic';
       }
 
       // Draw images in their placement areas
@@ -1829,13 +1829,10 @@
       } else {
         const isCheck = (p.key === 'check_v' || p.key === 'check_x');
         const wysiwygFs = (p.fontSize || 9) * displayScale * 0.72;
-        // ✓/✗ shown larger so user can see/tap precisely; centered at tap point
+        // ✓/✗ shown larger for easy tapping; all text centered at tap point to match PDF
         const textDisplayFs = isCheck ? Math.max(14, wysiwygFs * 2.5) : Math.max(7, wysiwygFs);
-        const transform = isCheck
-          ? 'translate(-50%,-50%)'
-          : `translate(0,-${Math.max(6, wysiwygFs * 0.85)}px)`;
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-          transform:${transform};
+          transform:translate(-50%,-50%);
           font-size:${textDisplayFs}px;line-height:1;
           color:rgba(180,0,0,0.92);
           font-family:'PingFang TC','Noto Sans TC',sans-serif;
@@ -1843,7 +1840,7 @@
           touch-action:none;user-select:none;
           background:rgba(255,200,200,0.4);
           padding:2px 3px;border-radius:2px;
-          min-width:${isCheck?'20':'22'}px;min-height:${isCheck?'20':'14'}px;
+          min-width:20px;min-height:14px;
           display:flex;align-items:center;justify-content:center;`;
         div.textContent = p.value;
         div.addEventListener('pointerdown', e => { e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div); });
@@ -2061,7 +2058,7 @@
         const imgH = (p.nh || 0.14) * vp.height;
         imagePlacements.push({ page: p.page, x: pdfX, y: pdfY - imgH, width: imgW, height: imgH, storageKey: p.storageKey });
       } else {
-        canvasPlacements.push({ page: p.page, x: pdfX, y: pdfY, value: p.value, fontSize: p.fontSize || 12 });
+        canvasPlacements.push({ page: p.page, x: pdfX, y: pdfY, value: p.value, fontSize: p.fontSize || 12, center: true });
       }
     }
     fillMode = 'canvas';
