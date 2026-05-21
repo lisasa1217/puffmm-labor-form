@@ -636,7 +636,11 @@
 
     <!-- ANALYZE -->
     <button class="analyze-btn" id="analyzeBtn" disabled onclick="analyze()">
-      ✦ 讀取欄位並預覽
+      ✦ 自動讀取欄位
+    </button>
+    <button class="analyze-btn" id="manualBtn" disabled onclick="openManualEditor()"
+      style="background:#f0f4ff;color:#4361ee;border:2px solid #c3d0ff;margin-top:6px;">
+      ✎ 手動拖放定位
     </button>
 
   </div>
@@ -1014,6 +1018,7 @@
         return;
       }
       document.getElementById('analyzeBtn').disabled = false;
+      document.getElementById('manualBtn').disabled = false;
     } catch(e) {
       showError('無法讀取檔案，請確認檔案未加密或損壞。');
     }
@@ -1038,6 +1043,7 @@
     document.getElementById('uploadZone').style.display = 'block';
     document.getElementById('fileInfo').style.display = 'none';
     document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('manualBtn').disabled = true;
     document.getElementById('pdfInput').value = '';
     resetMain();
   }
@@ -1502,6 +1508,173 @@
         btn.style.borderColor = '';
       }, 2000);
     });
+  }
+
+  // ── Manual Placement Editor ─────────────────────────────────
+  let editorPdf = null;
+  let editorPage = 1;
+  let editorScale = 2;
+  let editorPlacements = [];  // { id, page, nx, ny, value, label, key, isImage }
+  let activeChipData = null;
+
+  async function openManualEditor() {
+    if (!originalArrayBuffer) { alert('請先上傳 PDF'); return; }
+    editorPdf = await pdfjsLib.getDocument({ data: originalArrayBuffer.slice(0) }).promise;
+    editorPage = 1;
+    editorPlacements = [];
+    activeChipData = null;
+
+    const profile = getProfile();
+    const chips = [
+      { key: 'name',        label: '姓名',     value: profile.name },
+      { key: 'id',          label: '身分證字號', value: profile.id },
+      { key: 'birth',       label: '出生年月日', value: profile.birth },
+      { key: 'addr',        label: '戶籍地址',  value: profile.addr },
+      { key: 'addr2',       label: '通訊地址',  value: profile.addr2 || profile.addr },
+      { key: 'phone',       label: '電話',     value: profile.phone },
+      { key: 'email',       label: 'Email',    value: profile.email },
+      { key: 'bank_name',   label: '銀行/分行', value: [profile.bank_name, profile.bank_branch].filter(Boolean).join(' ') },
+      { key: 'bank_code',   label: '銀行代碼',  value: profile.bank_code },
+      { key: 'bank_acc',    label: '帳號',     value: profile.bank_acc },
+      { key: 'bank_holder', label: '戶名',     value: profile.bank_holder },
+      { key: 'today_roc',   label: '日期（民國）',value: profile.today_roc },
+    ].filter(f => f.value);
+
+    const imgChips = [
+      { key: 'img_idFront', label: '身分證正面', isImage: true },
+      { key: 'img_idBack',  label: '身分證反面', isImage: true },
+      { key: 'img_bank',    label: '存摺封面',  isImage: true },
+    ].filter(c => localStorage.getItem('lbs_' + c.key));
+
+    document.getElementById('mainPanel').innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:10px;">
+
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:15px;font-weight:600;">手動定位模式</div>
+          <button class="analyze-btn" style="width:auto;padding:10px 22px;font-size:14px;" onclick="downloadFromEditor()">⬇ 下載填好的 PDF</button>
+        </div>
+
+        <div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.7;">
+          1. 點選下方欄位標籤（選到後會變藍色）<br>
+          2. 在 PDF 上點擊你要放的位置<br>
+          3. 紅色標籤可再次點擊移除<br>
+          4. 確認無誤後按右上角「下載」
+        </div>
+
+        <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
+          ${chips.map(c => `
+            <button id="chip_${c.key}" onclick="selectEditorChip('${c.key}','${c.value.replace(/'/g,"\\'").replace(/"/g,"&quot;")}','${c.label}',false)"
+              style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#fff;cursor:pointer;font-size:12px;text-align:left;line-height:1.4;">
+              <span style="color:#888;display:block;font-size:10px;">${c.label}</span>${c.value}
+            </button>`).join('')}
+          ${imgChips.map(c => `
+            <button id="chip_${c.key}" onclick="selectEditorChip('${c.key}',null,'${c.label}',true)"
+              style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#e8f0fe;cursor:pointer;font-size:12px;">
+              📷 ${c.label}
+            </button>`).join('')}
+        </div>
+
+        <div style="position:relative;overflow:auto;border:1px solid #ddd;border-radius:8px;background:#eee;">
+          <canvas id="editorCanvas" style="display:block;"></canvas>
+          <div id="editorOverlay" style="position:absolute;inset:0;cursor:crosshair;" onclick="handleEditorClick(event)"></div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+          <button onclick="editorChangePage(-1)" style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;cursor:pointer;background:#fff;">← 上一頁</button>
+          <span id="editorPageInfo" style="font-size:13px;color:#888;"></span>
+          <button onclick="editorChangePage(1)" style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;cursor:pointer;background:#fff;">下一頁 →</button>
+        </div>
+      </div>`;
+
+    await renderEditorPage(editorPage);
+  }
+
+  async function renderEditorPage(pageNum) {
+    editorPage = pageNum;
+    const page = await editorPdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: editorScale });
+    const canvas = document.getElementById('editorCanvas');
+    if (!canvas) return;
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    canvas.style.width = '100%';
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    document.getElementById('editorPageInfo').textContent = `第 ${pageNum} / ${editorPdf.numPages} 頁`;
+    refreshOverlayDivs();
+  }
+
+  function refreshOverlayDivs() {
+    const overlay = document.getElementById('editorOverlay');
+    if (!overlay) return;
+    overlay.innerHTML = '';
+    for (const p of editorPlacements.filter(p => p.page === editorPage)) {
+      const div = document.createElement('div');
+      div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
+        transform:translate(0,-50%);background:rgba(200,0,0,0.85);color:#fff;
+        font-size:11px;padding:2px 7px;border-radius:4px;cursor:pointer;
+        white-space:nowrap;pointer-events:auto;max-width:180px;overflow:hidden;text-overflow:ellipsis;
+        box-shadow:0 1px 4px rgba(0,0,0,0.3);`;
+      div.textContent = p.isImage ? `📷 ${p.label}` : p.value;
+      div.title = '點擊移除';
+      div.onclick = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
+      overlay.appendChild(div);
+    }
+  }
+
+  function selectEditorChip(key, value, label, isImage) {
+    activeChipData = { key, value, label, isImage };
+    document.querySelectorAll('#editorChipBar button').forEach(b => {
+      b.style.borderColor = '#d0d5dd';
+      b.style.background = b.id === 'chip_' + key ? '#e0eaff' : (b.id.includes('img_') ? '#e8f0fe' : '#fff');
+    });
+    const btn = document.getElementById('chip_' + key);
+    if (btn) btn.style.borderColor = '#4361ee';
+    document.getElementById('editorOverlay').style.cursor = 'crosshair';
+  }
+
+  function handleEditorClick(event) {
+    if (!activeChipData) return;
+    const overlay = document.getElementById('editorOverlay');
+    const rect = overlay.getBoundingClientRect();
+    const nx = (event.clientX - rect.left) / rect.width;
+    const ny = (event.clientY - rect.top) / rect.height;
+    const id = 'pl_' + Date.now();
+    editorPlacements.push({ id, page: editorPage, nx, ny, ...activeChipData });
+    // Deselect chip after placing
+    activeChipData = null;
+    document.querySelectorAll('#editorChipBar button').forEach(b => {
+      b.style.borderColor = '#d0d5dd';
+      b.style.background = b.id.includes('img_') ? '#e8f0fe' : '#fff';
+    });
+    refreshOverlayDivs();
+  }
+
+  async function editorChangePage(dir) {
+    if (!editorPdf) return;
+    const next = editorPage + dir;
+    if (next < 1 || next > editorPdf.numPages) return;
+    await renderEditorPage(next);
+  }
+
+  async function downloadFromEditor() {
+    if (!editorPdf || editorPlacements.length === 0) { alert('請先放置至少一個欄位'); return; }
+    canvasPlacements = [];
+    imagePlacements = [];
+    for (const p of editorPlacements) {
+      const page = await editorPdf.getPage(p.page);
+      const vp = page.getViewport({ scale: 1 });
+      const pdfX = p.nx * vp.width;
+      const pdfY = (1 - p.ny) * vp.height;
+      if (p.isImage) {
+        const imgW = 140, imgH = 95;
+        imagePlacements.push({ page: p.page, x: pdfX - imgW / 2, y: pdfY - imgH / 2, width: imgW, height: imgH, key: p.key.replace('img_', '') });
+      } else {
+        canvasPlacements.push({ page: p.page, x: pdfX, y: pdfY, value: p.value, fontSize: 12 });
+      }
+    }
+    fillMode = 'canvas';
+    await fillCanvas();
   }
 </script>
 </body>
