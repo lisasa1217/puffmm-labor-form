@@ -630,13 +630,9 @@
       </div>
     </div>
 
-    <!-- ANALYZE -->
-    <button class="analyze-btn" id="analyzeBtn" disabled onclick="analyze()">
-      ✦ 自動讀取欄位
-    </button>
-    <button class="analyze-btn" id="manualBtn" disabled onclick="openManualEditor()"
-      style="background:#f0f4ff;color:#4361ee;border:2px solid #c3d0ff;margin-top:6px;">
-      ✎ 手動拖放定位
+    <!-- MANUAL EDITOR -->
+    <button class="analyze-btn" id="manualBtn" disabled onclick="openManualEditor()">
+      ✎ 預覽表格手動拖放定位
     </button>
 
   </div>
@@ -1013,7 +1009,6 @@
         showError('不支援此檔案格式，請上傳 PDF 或 Excel（.xlsx/.xls）檔案。');
         return;
       }
-      document.getElementById('analyzeBtn').disabled = false;
       document.getElementById('manualBtn').disabled = false;
     } catch(e) {
       showError('無法讀取檔案，請確認檔案未加密或損壞。');
@@ -1038,7 +1033,6 @@
     fileName = '';
     document.getElementById('uploadZone').style.display = 'block';
     document.getElementById('fileInfo').style.display = 'none';
-    document.getElementById('analyzeBtn').disabled = true;
     document.getElementById('manualBtn').disabled = true;
     document.getElementById('pdfInput').value = '';
     resetMain();
@@ -1113,6 +1107,11 @@
   function downloadBytes(bytes, name) {
     _lastPdfBytes = bytes;
     _lastPdfName = name;
+    if (_editorShareMode) {
+      _editorShareMode = false;
+      shareToLine();
+      return;
+    }
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1629,11 +1628,17 @@
       </style>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:15px;font-weight:600;">手動定位模式</div>
-          <button class="analyze-btn" style="width:auto;padding:10px 22px;font-size:14px;" onclick="downloadFromEditor()">⬇ 下載填好的 PDF</button>
+          <div style="font-size:15px;font-weight:600;">預覽表格手動拖放定位</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="analyze-btn" style="width:auto;padding:10px 20px;font-size:14px;background:#f5f5f5;color:#333;border:1px solid #ddd;" onclick="downloadFromEditor('download')">⬇ 下載 PDF</button>
+            <button class="analyze-btn" style="width:auto;padding:10px 20px;font-size:14px;background:#06c755;border:none;" onclick="downloadFromEditor('share')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white" style="vertical-align:middle;margin-right:4px;"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>
+              分享至 LINE
+            </button>
+          </div>
         </div>
         <div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.8;">
-          點選欄位 → 點 PDF 放置 ｜ 紅框可拖動移位 ｜ 右下角拖動調整大小 ｜ 雙擊紅框移除
+          點選欄位 → 點 PDF 放置 ｜ 藍線出現時會自動對齊 ｜ 紅框可拖動移位 ｜ 右下角拖動調整大小 ｜ 雙擊紅框移除
         </div>
         <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
           ${chipHTML}
@@ -1753,14 +1758,60 @@
       if (!_movingId) return;
       const dx = (ev.clientX - _moveOx) / rect.width;
       const dy = (ev.clientY - _moveOy) / rect.height;
-      p.nx = Math.max(0, Math.min(1, _moveOnx + dx));
-      p.ny = Math.max(0, Math.min(1, _moveOny + dy));
+      let nx = Math.max(0, Math.min(1, _moveOnx + dx));
+      let ny = Math.max(0, Math.min(1, _moveOny + dy));
+      // Snap to other placements
+      const snap = _editorSnapPoints(id);
+      const THRESH = 0.012;
+      let snappedX = null, snappedY = null;
+      for (const sx of snap.xs) { if (Math.abs(nx - sx) < THRESH) { nx = sx; snappedX = sx; break; } }
+      for (const sy of snap.ys) { if (Math.abs(ny - sy) < THRESH) { ny = sy; snappedY = sy; break; } }
+      p.nx = nx; p.ny = ny;
       const div = document.getElementById('pldiv_' + id);
-      if (div) { div.style.left = p.nx*100+'%'; div.style.top = p.ny*100+'%'; }
+      if (div) { div.style.left = nx*100+'%'; div.style.top = ny*100+'%'; }
+      _showGuideLines(snappedX, snappedY);
     };
-    const onUp = () => { _movingId = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = () => {
+      _movingId = null;
+      _hideGuideLines();
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+  }
+
+  function _editorSnapPoints(excludeId) {
+    const xs = [], ys = [];
+    for (const p of editorPlacements.filter(x => x.id !== excludeId && x.page === editorPage)) {
+      xs.push(p.nx);
+      ys.push(p.ny);
+      if (p.isImage) { xs.push(p.nx + (p.nw||0.22)); ys.push(p.ny + (p.nh||0.14)); }
+    }
+    return { xs, ys };
+  }
+
+  function _showGuideLines(snapX, snapY) {
+    const overlay = document.getElementById('editorOverlay');
+    if (!overlay) return;
+    let g = document.getElementById('editorGuides');
+    if (!g) { g = document.createElement('div'); g.id = 'editorGuides'; g.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:20;'; overlay.appendChild(g); }
+    g.innerHTML = '';
+    if (snapX !== null) {
+      const l = document.createElement('div');
+      l.style.cssText = `position:absolute;left:${snapX*100}%;top:0;bottom:0;width:1px;background:rgba(30,120,255,0.7);box-shadow:0 0 3px rgba(30,120,255,0.5);`;
+      g.appendChild(l);
+    }
+    if (snapY !== null) {
+      const l = document.createElement('div');
+      l.style.cssText = `position:absolute;top:${snapY*100}%;left:0;right:0;height:1px;background:rgba(30,120,255,0.7);box-shadow:0 0 3px rgba(30,120,255,0.5);`;
+      g.appendChild(l);
+    }
+  }
+
+  function _hideGuideLines() {
+    const g = document.getElementById('editorGuides');
+    if (g) g.innerHTML = '';
   }
 
   function startEditorResize(e, id) {
@@ -1792,8 +1843,11 @@
     await renderEditorPage(next);
   }
 
-  async function downloadFromEditor() {
+  let _editorShareMode = false;
+
+  async function downloadFromEditor(mode = 'download') {
     if (!editorPdf || editorPlacements.length === 0) { alert('請先放置至少一個欄位'); return; }
+    _editorShareMode = (mode === 'share');
     canvasPlacements = []; imagePlacements = [];
     for (const p of editorPlacements) {
       const page = await editorPdf.getPage(p.page);
