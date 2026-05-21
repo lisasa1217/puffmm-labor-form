@@ -1283,7 +1283,7 @@
 
       // Draw text overlays
       for (const p of canvasPlacements.filter(p => p.page === pageNum)) {
-        const fs = Math.max(p.fontSize, 9) * scale * 0.85;
+        const fs = Math.max(p.fontSize, 7) * scale * 0.72;
         ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
         ctx.fillStyle = '#000';
         ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
@@ -1338,7 +1338,7 @@
 
     // Text overlays (red so user can see them clearly)
     for (const p of canvasPlacements.filter(p => p.page === 1)) {
-      const fs = Math.max(p.fontSize, 9) * scale * 0.85;
+      const fs = Math.max(p.fontSize, 7) * scale * 0.72;
       ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
       ctx.fillStyle = 'rgba(200,0,0,0.85)';
       ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
@@ -1750,7 +1750,7 @@
         </div>
         <div style="position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#ccc;">
           <canvas id="editorCanvas" style="display:block;width:100%;"></canvas>
-          <div id="editorOverlay" style="position:absolute;inset:0;" onclick="handleEditorClick(event)" ontouchend="handleEditorTouch(event)"></div>
+          <div id="editorOverlay" style="position:absolute;inset:0;touch-action:none;" onclick="handleEditorClick(event)" ontouchend="handleEditorTouch(event)"></div>
         </div>
         <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
           <button onclick="editorChangePage(-1)" style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;cursor:pointer;background:#fff;">← 上一頁</button>
@@ -1778,13 +1778,12 @@
   function refreshOverlayDivs() {
     const overlay = document.getElementById('editorOverlay');
     if (!overlay) return;
-    // Keep guide div if present
     const guide = document.getElementById('editorGuides');
     overlay.innerHTML = '';
     if (guide) overlay.appendChild(guide);
 
     const overlayW = overlay.getBoundingClientRect().width || 400;
-    const labelFs = Math.max(8, Math.min(11, overlayW * 0.022)) + 'px';
+    const labelFs = Math.max(9, Math.min(13, overlayW * 0.025)) + 'px';
 
     for (const p of editorPlacements.filter(p => p.page === editorPage)) {
       const div = document.createElement('div');
@@ -1794,7 +1793,8 @@
         const imgData = localStorage.getItem(p.storageKey);
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
           width:${(p.nw||0.22)*100}%;height:${(p.nh||0.14)*100}%;
-          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:hidden;touch-action:none;`;
+          border:2px solid rgba(200,0,0,0.85);box-sizing:border-box;overflow:hidden;
+          cursor:move;touch-action:none;user-select:none;`;
         if (imgData) {
           const img = document.createElement('img');
           img.src = imgData;
@@ -1805,34 +1805,68 @@
         lbl.style.cssText = `position:absolute;top:1px;left:2px;font-size:${labelFs};color:rgba(200,0,0,0.9);background:rgba(255,255,255,0.75);padding:0 2px;pointer-events:none;border-radius:2px;`;
         lbl.textContent = p.label;
         div.appendChild(lbl);
-        // resize handle — larger for touch
+        // resize handle
         const rh = document.createElement('div');
-        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:22px;height:22px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:3px 0 0 0;touch-action:none;display:flex;align-items:center;justify-content:center;';
-        rh.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="white"><path d="M9 1L1 9M5 1L1 5M9 5L5 9" stroke="white" stroke-width="1.5"/></svg>';
-        const startResize = e => { e.stopPropagation(); e.preventDefault(); startEditorResize(e, p.id); };
-        rh.addEventListener('mousedown', startResize);
-        rh.addEventListener('touchstart', startResize, { passive: false });
+        rh.style.cssText = 'position:absolute;right:0;bottom:0;width:26px;height:26px;background:rgba(200,0,0,0.85);cursor:se-resize;border-radius:3px 0 0 0;touch-action:none;display:flex;align-items:center;justify-content:center;';
+        rh.innerHTML = '<svg width="11" height="11" viewBox="0 0 10 10"><path d="M9 1L1 9M5 1L1 5M9 5L5 9" stroke="white" stroke-width="1.8" fill="none"/></svg>';
+        rh.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); rh.setPointerCapture(e.pointerId); startEditorResize(e, p.id); });
         div.appendChild(rh);
+        // drag body
+        div.addEventListener('pointerdown', e => {
+          if (e.target === rh || rh.contains(e.target)) return;
+          e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div);
+        });
       } else {
+        // Text: bigger touch area
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-          transform:translate(0,-50%);background:rgba(200,0,0,0.85);color:#fff;
-          font-size:${labelFs};padding:2px 6px;border-radius:4px;cursor:move;
-          white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);pointer-events:auto;touch-action:none;`;
+          transform:translate(-2px,-50%);background:rgba(200,0,0,0.85);color:#fff;
+          font-size:${labelFs};padding:5px 8px;border-radius:5px;cursor:move;
+          white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);
+          touch-action:none;user-select:none;min-width:28px;min-height:28px;
+          display:flex;align-items:center;justify-content:center;`;
         div.textContent = p.value;
+        div.addEventListener('pointerdown', e => { e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div); });
       }
 
-      const removeFn = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
-      div.ondblclick = removeFn;
-      // Long-press to remove on touch
-      let _longPressTimer;
-      div.addEventListener('touchstart', e => { _longPressTimer = setTimeout(() => removeFn(e), 600); }, { passive: true });
-      div.addEventListener('touchend', () => clearTimeout(_longPressTimer));
-      div.addEventListener('touchmove', () => clearTimeout(_longPressTimer), { passive: true });
-
-      const startMoveFn = e => { if (e.target === div || (p.isImage && (e.target.tagName === 'IMG'))) { e.preventDefault(); startEditorMove(e, p.id); } };
-      div.addEventListener('mousedown', startMoveFn);
-      div.addEventListener('touchstart', startMoveFn, { passive: false });
+      div.ondblclick = e => { e.stopPropagation(); editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); };
+      let _lpt;
+      div.addEventListener('pointerdown', () => { _lpt = setTimeout(() => { editorPlacements = editorPlacements.filter(x => x.id !== p.id); refreshOverlayDivs(); }, 700); });
+      div.addEventListener('pointermove', () => clearTimeout(_lpt));
+      div.addEventListener('pointerup', () => clearTimeout(_lpt));
       overlay.appendChild(div);
+    }
+  }
+
+  function startEditorMovePtr(e, id, div) {
+    const overlay = document.getElementById('editorOverlay');
+    const rect = overlay.getBoundingClientRect();
+    const p = editorPlacements.find(x => x.id === id);
+    const startX = e.clientX, startY = e.clientY;
+    const startNx = p.nx, startNy = p.ny;
+    div.addEventListener('pointermove', onMove);
+    div.addEventListener('pointerup', onUp);
+    div.addEventListener('pointercancel', onUp);
+    function onMove(ev) {
+      const dx = (ev.clientX - startX) / rect.width;
+      const dy = (ev.clientY - startY) / rect.height;
+      let nx = Math.max(0, Math.min(0.98, startNx + dx));
+      let ny = Math.max(0, Math.min(0.98, startNy + dy));
+      let snappedX = null, snappedY = null;
+      if (_snapEnabled) {
+        const snap = _editorSnapPoints(id);
+        const T = 0.015;
+        for (const sx of snap.xs) { if (Math.abs(nx - sx) < T) { nx = sx; snappedX = sx; break; } }
+        for (const sy of snap.ys) { if (Math.abs(ny - sy) < T) { ny = sy; snappedY = sy; break; } }
+      }
+      p.nx = nx; p.ny = ny;
+      div.style.left = nx*100+'%'; div.style.top = ny*100+'%';
+      _showGuideLines(snappedX, snappedY);
+    }
+    function onUp() {
+      _hideGuideLines();
+      div.removeEventListener('pointermove', onMove);
+      div.removeEventListener('pointerup', onUp);
+      div.removeEventListener('pointercancel', onUp);
     }
   }
 
@@ -1951,36 +1985,28 @@
   }
 
   function startEditorResize(e, id) {
-    try { e.preventDefault(); e.stopPropagation(); } catch(_){}
-    _resizingId = id;
     const overlay = document.getElementById('editorOverlay');
     const rect = overlay.getBoundingClientRect();
     const p = editorPlacements.find(x => x.id === id);
-    const startPos = _evPos(e);
-    _resizeOx = startPos.x; _resizeOy = startPos.y;
-    _resizeOw = p.nw || 0.22; _resizeOh = p.nh || 0.14;
-    const onMove = ev => {
-      if (!_resizingId) return;
-      if (ev.cancelable) ev.preventDefault();
-      const pos = _evPos(ev);
-      const dx = (pos.x - _resizeOx) / rect.width;
-      const dy = (pos.y - _resizeOy) / rect.height;
-      p.nw = Math.max(0.03, _resizeOw + dx);
-      p.nh = Math.max(0.02, _resizeOh + dy);
+    const startX = e.clientX, startY = e.clientY;
+    const startW = p.nw || 0.22, startH = p.nh || 0.14;
+    const rh = e.currentTarget;
+    rh.addEventListener('pointermove', onMove);
+    rh.addEventListener('pointerup', onUp);
+    rh.addEventListener('pointercancel', onUp);
+    function onMove(ev) {
+      const dx = (ev.clientX - startX) / rect.width;
+      const dy = (ev.clientY - startY) / rect.height;
+      p.nw = Math.max(0.04, startW + dx);
+      p.nh = Math.max(0.03, startH + dy);
       const div = document.getElementById('pldiv_' + id);
       if (div) { div.style.width = p.nw*100+'%'; div.style.height = p.nh*100+'%'; }
-    };
-    const onUp = () => {
-      _resizingId = null;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onUp);
+    }
+    function onUp() {
+      rh.removeEventListener('pointermove', onMove);
+      rh.removeEventListener('pointerup', onUp);
+      rh.removeEventListener('pointercancel', onUp);
+    }
   }
 
   async function editorChangePage(dir) {
