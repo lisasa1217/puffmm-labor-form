@@ -1112,7 +1112,12 @@
   let canvasPlacements = [];
   let imagePlacements = [];
 
+  let _lastPdfBytes = null;
+  let _lastPdfName = '';
+
   function downloadBytes(bytes, name) {
+    _lastPdfBytes = bytes;
+    _lastPdfName = name;
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1120,6 +1125,52 @@
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showShareBar(name);
+  }
+
+  function showShareBar(name) {
+    // Remove old bar if any
+    const old = document.getElementById('shareBar');
+    if (old) old.remove();
+    const bar = document.createElement('div');
+    bar.id = 'shareBar';
+    bar.style.cssText = `position:fixed;bottom:0;left:0;right:0;background:#fff;
+      border-top:1px solid #e0e0e0;padding:12px 16px;display:flex;align-items:center;
+      gap:10px;flex-wrap:wrap;z-index:9999;box-shadow:0 -2px 12px rgba(0,0,0,0.08);`;
+    bar.innerHTML = `
+      <span style="font-size:13px;color:#555;flex:1;min-width:120px;">📄 ${name} 已下載</span>
+      <button onclick="downloadBytes(_lastPdfBytes,_lastPdfName)"
+        style="padding:8px 16px;border-radius:8px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;font-size:13px;">
+        ⬇ 再次下載
+      </button>
+      <button onclick="shareToLine()"
+        style="padding:8px 18px;border-radius:8px;border:none;background:#06c755;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">
+        分享至 LINE
+      </button>
+      <button onclick="document.getElementById('shareBar').remove()"
+        style="padding:8px;border-radius:8px;border:none;background:none;cursor:pointer;font-size:18px;color:#aaa;">✕</button>
+    `;
+    document.body.appendChild(bar);
+  }
+
+  async function shareToLine() {
+    if (!_lastPdfBytes) return;
+    const name = _lastPdfName || '已填寫.pdf';
+    // Try Web Share API with file (works on mobile LINE)
+    if (navigator.canShare) {
+      try {
+        const file = new File([_lastPdfBytes], name, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: name });
+          return;
+        }
+      } catch(e) { if (e.name === 'AbortError') return; }
+    }
+    // Fallback: share text summary via LINE URL
+    const fields = canvasPlacements.map(p => p.value).join('、');
+    const text = `【勞報單填寫資料】\n${fields ? fields + '\n' : ''}PDF 檔已下載，請手動附加檔案。`;
+    const lineUrl = 'https://line.me/R/msg/text/' + encodeURIComponent(text);
+    window.open(lineUrl, '_blank');
   }
 
   async function fillAndDownload() {
@@ -1526,9 +1577,9 @@
 
     const profile = getProfile();
 
-    // Split birth date into components
-    const bm = (profile.birth || '').match(/(\d+)年(\d+)月(\d+)日/);
-    const tm = (profile.today_roc || '').match(/(\d+)年(\d+)月(\d+)日/);
+    // Split birth date into components (format: "民國 82 年 12 月 17 日")
+    const bm = (profile.birth || '').match(/(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/);
+    const tm = (profile.today_roc || '').match(/(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/);
 
     const chips = [
       { key: 'name',        label: '姓名',      value: profile.name },
