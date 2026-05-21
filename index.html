@@ -1286,7 +1286,10 @@
         const fs = Math.max(p.fontSize, 7) * scale * 0.72;
         ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
         ctx.fillStyle = '#000';
+        const isCheck = (p.value === '✓' || p.value === '✗');
+        if (isCheck) ctx.textBaseline = 'middle';
         ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
+        if (isCheck) ctx.textBaseline = 'alphabetic';
       }
 
       // Draw images in their placement areas
@@ -1824,13 +1827,15 @@
           e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div);
         });
       } else {
-        // Compute true WYSIWYG size first; clamp only for display
+        const isCheck = (p.key === 'check_v' || p.key === 'check_x');
         const wysiwygFs = (p.fontSize || 9) * displayScale * 0.72;
-        const textDisplayFs = Math.max(7, wysiwygFs);
-        // Shift by actual WYSIWYG baseline (not clamped size) so position matches PDF on all screen sizes
-        const baselineShift = Math.max(6, wysiwygFs * 0.85);
+        // ✓/✗ shown larger so user can see/tap precisely; centered at tap point
+        const textDisplayFs = isCheck ? Math.max(14, wysiwygFs * 2.5) : Math.max(7, wysiwygFs);
+        const transform = isCheck
+          ? 'translate(-50%,-50%)'
+          : `translate(0,-${Math.max(6, wysiwygFs * 0.85)}px)`;
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-          transform:translate(0,-${baselineShift}px);
+          transform:${transform};
           font-size:${textDisplayFs}px;line-height:1;
           color:rgba(180,0,0,0.92);
           font-family:'PingFang TC','Noto Sans TC',sans-serif;
@@ -1838,7 +1843,8 @@
           touch-action:none;user-select:none;
           background:rgba(255,200,200,0.4);
           padding:2px 3px;border-radius:2px;
-          min-width:22px;min-height:14px;`;
+          min-width:${isCheck?'20':'22'}px;min-height:${isCheck?'20':'14'}px;
+          display:flex;align-items:center;justify-content:center;`;
         div.textContent = p.value;
         div.addEventListener('pointerdown', e => { e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div); });
       }
