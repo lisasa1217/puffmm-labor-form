@@ -1820,27 +1820,18 @@
           e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div);
         });
       } else {
-        // WYSIWYG: match the 0.72 factor used in fillCanvas so displayed size = PDF size
         const textDisplayFs = Math.max(8, (p.fontSize || 9) * displayScale * 1.0);
-        // Bottom of div aligns with click point = PDF text baseline position
+        // translate(-50%) centers the div at the tap point — matches PDF baseline within half a char height
         div.style.cssText = `position:absolute;left:${p.nx*100}%;top:${p.ny*100}%;
-          transform:translate(0,-100%);
-          font-size:${textDisplayFs}px;color:rgba(180,0,0,0.95);
+          transform:translate(0,-50%);
+          font-size:${textDisplayFs}px;color:rgba(160,0,0,0.95);
           font-family:'PingFang TC','Noto Sans TC',sans-serif;
           white-space:nowrap;cursor:move;
           touch-action:none;user-select:none;
-          border:1.5px dashed rgba(220,0,0,0.7);border-radius:3px;
-          background:rgba(255,220,220,0.35);
-          padding:1px 3px;min-width:32px;min-height:18px;
-          display:flex;align-items:flex-end;line-height:1;`;
-        const handle = document.createElement('span');
-        handle.style.cssText = 'position:absolute;top:-14px;left:0;background:rgba(200,0,0,0.85);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px 3px 0 0;white-space:nowrap;pointer-events:none;max-width:80px;overflow:hidden;text-overflow:ellipsis;';
-        handle.textContent = p.label || p.value;
-        div.appendChild(handle);
-        const textSpan = document.createElement('span');
-        textSpan.textContent = p.value;
-        textSpan.style.pointerEvents = 'none';
-        div.appendChild(textSpan);
+          border:1.5px solid rgba(220,0,0,0.6);border-radius:3px;
+          background:rgba(255,230,230,0.55);
+          padding:1px 4px;line-height:1.2;`;
+        div.textContent = p.value;
         div.addEventListener('pointerdown', e => { e.preventDefault(); div.setPointerCapture(e.pointerId); startEditorMovePtr(e, p.id, div); });
       }
 
