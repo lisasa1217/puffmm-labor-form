@@ -1232,7 +1232,7 @@
       try {
         const file = new File([_lastPdfBytes], name, { type: 'application/pdf' });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: name });
+          await navigator.share({ files: [file] });
           return;
         }
       } catch(e) { if (e.name === 'AbortError') return; }
@@ -1290,7 +1290,7 @@
         const cy = viewport.height - p.y * scale;
         if (p.value === '■') {
           // Solid square centered at tap point — most reliable cross-device
-          const sz = fs * 0.42;
+          const sz = fs * 0.55;
           ctx.fillStyle = '#000';
           ctx.fillRect(cx - sz / 2, cy - sz / 2, sz, sz);
         } else if (p.value === '✗') {
@@ -1760,7 +1760,7 @@
         <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
           ${chipHTML}
           <div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>
-          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('■')}" data-label="■ 方塊" data-isimage="false" data-fontsize="10"
+          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('■')}" data-label="■ 方塊" data-isimage="false" data-fontsize="14"
             onclick="selectEditorChip(this)"
             style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#f0fff4;cursor:pointer;font-size:18px;font-weight:700;color:#111;">■</button>
           <button class="ed-chip" data-key="check_x" data-value="${encodeURIComponent('✗')}" data-label="✗ 叉叉" data-isimage="false" data-fontsize="10"
@@ -1863,7 +1863,7 @@
             id: 'pl_' + Date.now(), page: editorPage,
             nx: box.nx, ny: box.ny, nw: 0.04, nh: 0.03,
             key: 'check_v', value: '■', label: '■ ' + box.label,
-            isImage: false, fontSize: 10, center: true
+            isImage: false, fontSize: 14, center: true
           });
           refreshOverlayDivs();
         };
