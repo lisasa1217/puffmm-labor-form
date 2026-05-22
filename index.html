@@ -1203,7 +1203,7 @@
     const name = _lastPdfName || '已填寫.pdf';
     const file = new File([_lastPdfBytes], name, { type: 'application/pdf' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: '​' }); return; }
+      try { await navigator.share({ files: [file], title: '勞報單完成囉～謝謝' }); return; }
       catch(e) { if (e.name === 'AbortError') return; }
     }
     // Fallback: just download the file
