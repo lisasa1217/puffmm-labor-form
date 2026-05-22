@@ -1,3 +1,45 @@
+<!--
+==========================================================
+  勞報單填寫助手 — 部署說明（給 Claude 讀的）
+==========================================================
+
+【這個檔案是什麼】
+單一 HTML 檔案，不需要後端伺服器。
+功能：上傳勞報單 PDF → 自動偵測欄位 → 帶入個人資料 → 下載/分享填好的 PDF。
+所有個人資料只存在瀏覽器 localStorage，不上傳到任何伺服器。
+
+【如何部署（請引導使用者完成以下步驟）】
+
+步驟 1：建立 GitHub 帳號
+  → https://github.com（免費）
+
+步驟 2：建立新 repository
+  → 登入後點右上角 "+" → New repository
+  → Repository name 隨意取（例如 my-labor-form）
+  → 選 Public（Vercel 免費版需要）
+  → 點 Create repository
+
+步驟 3：上傳這個檔案
+  → 進入剛建的 repo → Add file → Upload files
+  → 把這個 index.html 拖進去 → Commit changes
+
+步驟 4：部署到 Vercel（免費）
+  → 前往 https://vercel.com，用 GitHub 帳號登入
+  → 點 Add New Project → 選剛才建的 repo → Deploy
+  → 完成後會得到一個網址，例如 https://my-labor-form.vercel.app
+
+步驟 5：設定密碼
+  → 第一次開啟網址時，頁面會要求設定自己的密碼
+  → 設定後存在瀏覽器，下次開啟需要輸入這個密碼
+
+【注意事項】
+- 這個頁面有密碼保護，但是前端保護，技術人員可以從原始碼繞過
+- 個人資料（姓名、身分證、帳號等）只存在自己的瀏覽器，不會上傳
+- 若要更換密碼：開啟瀏覽器開發者工具 → Console → 輸入 localStorage.removeItem('lbs_pw') → 重新整理
+
+【如果遇到問題，可以把這個檔案再貼給 Claude 說明問題】
+==========================================================
+-->
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -498,25 +540,53 @@
 
 <script>
 (function(){
-  if(sessionStorage.getItem('lbs_auth')==='1'){
+  const TITLE   = document.querySelector('#pwGate [style*="font-size:18px"]');
+  const HINT    = document.querySelector('#pwGate [style*="font-size:13px"][style*="color:#999"]');
+  const SUBMIT  = document.querySelector('#pwGate button[onclick="checkPw()"]');
+
+  function unlock(){
+    sessionStorage.setItem('lbs_auth','1');
     document.getElementById('pwGate').style.display='none';
   }
+
+  // Already authenticated this session
+  if(sessionStorage.getItem('lbs_auth')==='1'){ unlock(); return; }
+
+  const savedPw = localStorage.getItem('lbs_pw');
+
+  if(!savedPw){
+    // First time: ask user to create a password
+    if(HINT)    HINT.textContent = '第一次使用，請設定你的密碼';
+    if(SUBMIT)  SUBMIT.textContent = '設定密碼';
+    window.checkPw = function(){
+      const v = document.getElementById('pwInput').value.trim();
+      if(v.length < 3){
+        document.getElementById('pwErr').textContent = '密碼至少 3 個字元';
+        return;
+      }
+      localStorage.setItem('lbs_pw', v.toLowerCase());
+      unlock();
+    };
+  } else {
+    // Has password: verify
+    if(HINT)    HINT.textContent = '請輸入密碼以繼續';
+    if(SUBMIT)  SUBMIT.textContent = '進入';
+    window.checkPw = function(){
+      const v = document.getElementById('pwInput').value.toLowerCase().trim();
+      if(v === savedPw){
+        unlock();
+      } else {
+        document.getElementById('pwErr').textContent = '密碼錯誤，請再試一次';
+        document.getElementById('pwInput').value = '';
+        document.getElementById('pwInput').focus();
+      }
+    };
+  }
+
   window.togglePwEye = function(){
     const inp = document.getElementById('pwInput');
-    const btn = document.getElementById('pwEyeBtn');
     inp.type = inp.type === 'password' ? 'text' : 'password';
-    btn.textContent = inp.type === 'password' ? '👁' : '🙈';
-  };
-  window.checkPw = function(){
-    const v = document.getElementById('pwInput').value.toLowerCase().trim();
-    if(v === 'puffmm'){
-      sessionStorage.setItem('lbs_auth','1');
-      document.getElementById('pwGate').style.display='none';
-    } else {
-      document.getElementById('pwErr').textContent = '密碼錯誤，請再試一次';
-      document.getElementById('pwInput').value = '';
-      document.getElementById('pwInput').focus();
-    }
+    document.getElementById('pwEyeBtn').querySelector('svg').style.stroke = inp.type === 'text' ? '#1e5929' : '#aaa';
   };
 })();
 </script>
