@@ -470,6 +470,41 @@
 </head>
 <body>
 
+<div id="pwGate" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#f5f7ff,#eef1ff);display:flex;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:20px;padding:36px 32px;box-shadow:0 8px 40px rgba(67,97,238,0.15);width:90%;max-width:360px;text-align:center;">
+    <div style="font-size:32px;margin-bottom:12px;">🔒</div>
+    <div style="font-size:18px;font-weight:700;color:#1a1a2e;margin-bottom:6px;">勞報單填寫助手</div>
+    <div style="font-size:13px;color:#888;margin-bottom:24px;">請輸入密碼以繼續</div>
+    <input id="pwInput" type="password" placeholder="密碼" autocomplete="current-password"
+      style="width:100%;box-sizing:border-box;padding:12px 16px;border:1.5px solid #dde2f8;border-radius:12px;font-size:16px;outline:none;text-align:center;margin-bottom:12px;"
+      onkeydown="if(event.key==='Enter')checkPw()">
+    <div id="pwErr" style="font-size:12px;color:#e53e3e;min-height:16px;margin-bottom:8px;"></div>
+    <button onclick="checkPw()"
+      style="width:100%;padding:13px;background:linear-gradient(135deg,#4361ee,#3a0ca3);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">
+      進入
+    </button>
+  </div>
+</div>
+
+<script>
+(function(){
+  if(sessionStorage.getItem('lbs_auth')==='1'){
+    document.getElementById('pwGate').style.display='none';
+  }
+  window.checkPw = function(){
+    const v = document.getElementById('pwInput').value;
+    if(v==='puffmm'){
+      sessionStorage.setItem('lbs_auth','1');
+      document.getElementById('pwGate').style.display='none';
+    } else {
+      document.getElementById('pwErr').textContent='密碼錯誤，請再試一次';
+      document.getElementById('pwInput').value='';
+      document.getElementById('pwInput').focus();
+    }
+  };
+})();
+</script>
+
 <header>
   <div class="logo-dot"></div>
   <h1>勞報單填寫助手</h1>
