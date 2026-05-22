@@ -11,14 +11,14 @@
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
 
   :root {
-    --bg: #edfaf7;
+    --bg: #fffae0;
     --surface: #ffffff;
-    --surface2: #f0fcfa;
-    --border: #b8e8e0;
-    --accent: #2ec4b6;
-    --accent2: #48cae4;
-    --text: #1a3835;
-    --muted: #7ab8b2;
+    --surface2: #fff5c8;
+    --border: #f0d96e;
+    --accent: #1e5929;
+    --accent2: #fbcd2c;
+    --text: #1a2e10;
+    --muted: #7a8c3a;
     --danger: #e05555;
   }
 
@@ -45,7 +45,7 @@
     width: 10px; height: 10px;
     border-radius: 50%;
     background: var(--accent);
-    box-shadow: 0 0 8px rgba(46,196,182,0.4);
+    box-shadow: 0 0 8px rgba(30,89,41,0.4);
   }
   header h1 {
     font-size: 16px;
@@ -182,7 +182,7 @@
     letter-spacing: 0.04em;
   }
   .analyze-btn:hover:not(:disabled) {
-    background: #1aa89b;
+    background: #174d22;
     transform: translateY(-1px);
   }
   .analyze-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
@@ -437,7 +437,7 @@
   }
   .sig-btn:hover { border-color: var(--accent); color: var(--accent); }
   .sig-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
-  .sig-btn.primary:hover { background: #235c42; }
+  .sig-btn.primary:hover { background: #174d22; }
 
   /* IMAGE PREVIEW IN RESULT */
   .img-preview-row { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -470,28 +470,28 @@
 </head>
 <body>
 
-<div id="pwGate" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#a8edea 0%,#c8f7c5 50%,#7bd5c8 100%);display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC',sans-serif;">
+<div id="pwGate" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#fbcd2c 0%,#ffe97a 50%,#f5c400 100%);display:flex;align-items:center;justify-content:center;font-family:'Noto Sans TC',sans-serif;">
   <div style="position:absolute;top:6%;left:5%;font-size:52px;opacity:0.5;user-select:none;">☁️</div>
   <div style="position:absolute;top:12%;right:8%;font-size:36px;opacity:0.4;user-select:none;">☁️</div>
   <div style="position:absolute;bottom:10%;left:10%;font-size:38px;opacity:0.4;user-select:none;">🌿</div>
   <div style="position:absolute;bottom:8%;right:6%;font-size:42px;opacity:0.4;user-select:none;">🌱</div>
   <div style="position:absolute;top:38%;left:2%;font-size:26px;opacity:0.3;user-select:none;">⭐</div>
   <div style="position:absolute;top:28%;right:3%;font-size:22px;opacity:0.3;user-select:none;">✨</div>
-  <div style="background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:28px;padding:40px 32px 32px;box-shadow:0 12px 48px rgba(46,196,182,0.2);width:90%;max-width:340px;text-align:center;">
+  <div style="background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:28px;padding:40px 32px 32px;box-shadow:0 12px 48px rgba(30,89,41,0.2);width:90%;max-width:340px;text-align:center;">
     <div style="font-size:52px;margin-bottom:10px;line-height:1;">🐢</div>
-    <div style="font-size:20px;font-weight:700;color:#1a3835;margin-bottom:4px;">勞報單填寫助手</div>
-    <div style="font-size:13px;color:#7ab8b2;margin-bottom:28px;">請輸入密碼以繼續 ✦</div>
+    <div style="font-size:20px;font-weight:700;color:#1a2e10;margin-bottom:4px;">勞報單填寫助手</div>
+    <div style="font-size:13px;color:#7a8c3a;margin-bottom:28px;">請輸入密碼以繼續 ✦</div>
     <div style="position:relative;margin-bottom:8px;">
       <input id="pwInput" type="password" placeholder="輸入密碼" autocomplete="current-password"
-        style="width:100%;box-sizing:border-box;padding:13px 46px 13px 18px;border:2px solid #b8e8e0;border-radius:16px;font-size:16px;outline:none;background:#f0fdfb;color:#1a3835;font-family:'Noto Sans TC',sans-serif;transition:border-color 0.2s;"
+        style="width:100%;box-sizing:border-box;padding:13px 46px 13px 18px;border:2px solid #b8e8e0;border-radius:16px;font-size:16px;outline:none;background:#fffae8;color:#1a2e10;font-family:'Noto Sans TC',sans-serif;transition:border-color 0.2s;"
         onkeydown="if(event.key==='Enter')checkPw()"
-        onfocus="this.style.borderColor='#2ec4b6'" onblur="this.style.borderColor='#b8e8e0'">
+        onfocus="this.style.borderColor='#1e5929'" onblur="this.style.borderColor='#b8e8e0'">
       <button id="pwEyeBtn" onclick="togglePwEye()" type="button"
-        style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#7ab8b2;font-size:18px;line-height:1;touch-action:manipulation;">👁</button>
+        style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#7a8c3a;font-size:18px;line-height:1;touch-action:manipulation;">👁</button>
     </div>
     <div id="pwErr" style="font-size:12px;color:#e05555;min-height:18px;margin-bottom:12px;text-align:left;padding-left:4px;"></div>
     <button onclick="checkPw()"
-      style="width:100%;padding:14px;background:linear-gradient(135deg,#2ec4b6,#48cae4);color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.05em;box-shadow:0 4px 16px rgba(46,196,182,0.35);">
+      style="width:100%;padding:14px;background:linear-gradient(135deg,#1e5929,#fbcd2c);color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.05em;box-shadow:0 4px 16px rgba(30,89,41,0.35);">
       進入 ✦
     </button>
   </div>
@@ -1689,8 +1689,8 @@
     _snapEnabled = !_snapEnabled;
     const btn = document.getElementById('snapToggleBtn');
     if (btn) btn.textContent = _snapEnabled ? '🔒 自動對齊：開' : '🔓 自動對齊：關';
-    if (btn) btn.style.background = _snapEnabled ? '#c8f0ec' : '#f5f5f5';
-    if (btn) btn.style.color = _snapEnabled ? '#2ec4b6' : '#888';
+    if (btn) btn.style.background = _snapEnabled ? '#fff3a8' : '#f5f5f5';
+    if (btn) btn.style.color = _snapEnabled ? '#1e5929' : '#888';
     _hideGuideLines();
   }
 
@@ -1754,7 +1754,7 @@
     const imgChipHTML = imgChips.map(c => `
       <button class="ed-chip" data-key="${c.key}" data-label="${c.label}" data-isimage="true" data-storagekey="${c.storageKey}"
         onclick="selectEditorChip(this)"
-        style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#e8f0fe;cursor:pointer;font-size:12px;">
+        style="padding:4px 10px;border-radius:16px;border:2px solid #d0d5dd;background:#fef9e0;cursor:pointer;font-size:12px;">
         📷 ${c.label}
       </button>`).join('');
 
@@ -1762,11 +1762,11 @@
       <style>
         .ed-chip { transition:all 0.15s ease;flex-shrink:0; }
         .ed-chip:active { transform:scale(0.93); }
-        .ed-chip.active { border-color:#2ec4b6!important;background:#c8f0ec!important;box-shadow:0 0 0 3px rgba(46,196,182,0.18)!important; }
+        .ed-chip.active { border-color:#1e5929!important;background:#fff3a8!important;box-shadow:0 0 0 3px rgba(30,89,41,0.18)!important; }
         .chip-row { display:flex;gap:7px;overflow-x:auto;padding:6px 12px 10px;-webkit-overflow-scrolling:touch;scrollbar-width:none; }
         .chip-row::-webkit-scrollbar { display:none; }
-        .chip-sec-label { font-size:10px;color:#5ab8b0;font-weight:700;letter-spacing:0.6px;padding:8px 12px 2px;text-transform:uppercase; }
-        #editorToolbar { background:linear-gradient(135deg,#f0fdfb 0%,#e4f9f6 100%);border:1.5px solid #a8dfd8;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(46,196,182,0.06); }
+        .chip-sec-label { font-size:10px;color:#7a8c3a;font-weight:700;letter-spacing:0.6px;padding:8px 12px 2px;text-transform:uppercase; }
+        #editorToolbar { background:linear-gradient(135deg,#fffae8 0%,#fffae0 100%);border:1.5px solid #f0d96e;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(30,89,41,0.06); }
         @media(min-width:640px){
           #editorDesktopBtns { display:flex!important; }
           #editorFixedBar { display:none!important; }
@@ -1777,7 +1777,7 @@
       <div class="ed-main" style="display:flex;flex-direction:column;gap:10px;padding-bottom:88px;">
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <div style="font-size:15px;font-weight:700;color:#1a1a2e;">📋 手動定位貼上</div>
+          <div style="font-size:15px;font-weight:700;color:#1a2e10;">📋 手動定位貼上</div>
           <div id="editorDesktopBtns" style="display:none;gap:8px;">
             <button onclick="downloadFromEditor('download')" style="padding:8px 18px;border-radius:10px;border:1px solid #ddd;background:#f5f5f5;color:#333;font-size:13px;cursor:pointer;font-weight:600;">⬇ 下載 PDF</button>
           </div>
@@ -1786,7 +1786,7 @@
         <div style="background:linear-gradient(135deg,#fffde8,#fff8cc);border:1px solid #f0d060;border-radius:10px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
           <span style="font-size:11.5px;color:#6b5000;line-height:1.7;">點欄位 → 點 PDF 放置 ｜ 拖動移位 ｜ × 移除</span>
           <button id="snapToggleBtn" onclick="toggleSnap()"
-            style="flex-shrink:0;padding:5px 12px;border-radius:20px;border:1.5px solid #2ec4b6;background:#c8f0ec;color:#2ec4b6;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;touch-action:manipulation;">
+            style="flex-shrink:0;padding:5px 12px;border-radius:20px;border:1.5px solid #1e5929;background:#fff3a8;color:#1e5929;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;touch-action:manipulation;">
             🔒 自動對齊：開
           </button>
         </div>
@@ -1794,18 +1794,18 @@
         <div id="editorToolbar">
           <div class="chip-sec-label">欄位資料</div>
           <div class="chip-row">${chipHTML}</div>
-          ${imgChips.length ? `<div style="border-top:1px solid rgba(46,196,182,0.1);margin:0 12px;"></div>
+          ${imgChips.length ? `<div style="border-top:1px solid rgba(30,89,41,0.1);margin:0 12px;"></div>
           <div class="chip-sec-label">圖章</div>
           <div class="chip-row">${imgChips.map(c =>
             `<button class="ed-chip" data-key="${c.key}" data-label="${c.label}" data-isimage="true" data-storagekey="${c.storageKey}"
               onclick="selectEditorChip(this)"
-              style="padding:6px 14px;border-radius:20px;border:2px solid #b8ccf4;background:#e8f0fe;cursor:pointer;font-size:12px;font-weight:600;color:#2c4aa0;white-space:nowrap;">
+              style="padding:6px 14px;border-radius:20px;border:2px solid #e8c84a;background:#fef9e0;cursor:pointer;font-size:12px;font-weight:600;color:#1e5929;white-space:nowrap;">
               📷 ${c.label}
             </button>`).join('')}</div>` : ''}
         </div>
 
-        <div id="editorCheckboxBar" style="display:none;background:linear-gradient(135deg,#ebf8ff,#e0f0ff);border:1.5px solid #90cdf4;border-radius:12px;padding:10px 12px;">
-          <div style="font-size:11px;color:#1e5a8a;font-weight:700;margin-bottom:6px;letter-spacing:0.3px;">📋 偵測到勾選框 — 點按鈕自動對準放置</div>
+        <div id="editorCheckboxBar" style="display:none;background:linear-gradient(135deg,#fffbe6,#fff5c0);border:1.5px solid #e8c84a;border-radius:12px;padding:10px 12px;">
+          <div style="font-size:11px;color:#1e5929;font-weight:700;margin-bottom:6px;letter-spacing:0.3px;">📋 偵測到勾選框 — 點按鈕自動對準放置</div>
           <div id="editorCheckboxBtns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
         </div>
 
@@ -1918,7 +1918,7 @@
       found.forEach(box => {
         const btn = document.createElement('button');
         btn.textContent = '■ ' + box.label;
-        btn.style.cssText = 'padding:5px 12px;border-radius:14px;border:1.5px solid #90cdf4;background:#ebf8ff;cursor:pointer;font-size:13px;color:#1a365d;touch-action:manipulation;';
+        btn.style.cssText = 'padding:5px 12px;border-radius:14px;border:1.5px solid #e8c84a;background:#fffbe6;cursor:pointer;font-size:13px;color:#1a2e10;touch-action:manipulation;';
         btn.addEventListener('pointerdown', e => { e.stopPropagation(); });
         btn.onclick = () => {
           editorPlacements.push({
