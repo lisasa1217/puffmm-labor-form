@@ -1288,15 +1288,11 @@
         ctx.fillStyle = '#000';
         const cx = p.x * scale;
         const cy = viewport.height - p.y * scale;
-        if (p.value === '✓') {
-          const sz = fs * 0.45;
-          ctx.save(); ctx.strokeStyle = '#000'; ctx.lineWidth = sz * 0.22;
-          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-          ctx.beginPath();
-          ctx.moveTo(cx - sz * 0.45, cy - sz * 0.05);
-          ctx.lineTo(cx - sz * 0.1,  cy + sz * 0.45);
-          ctx.lineTo(cx + sz * 0.55, cy - sz * 0.55);
-          ctx.stroke(); ctx.restore();
+        if (p.value === '■') {
+          // Solid square centered at tap point — most reliable cross-device
+          const sz = fs * 0.42;
+          ctx.fillStyle = '#000';
+          ctx.fillRect(cx - sz / 2, cy - sz / 2, sz, sz);
         } else if (p.value === '✗') {
           const sz = fs * 0.38;
           ctx.save(); ctx.strokeStyle = '#000'; ctx.lineWidth = sz * 0.22;
@@ -1305,10 +1301,10 @@
           ctx.beginPath(); ctx.moveTo(cx + sz, cy - sz); ctx.lineTo(cx - sz, cy + sz); ctx.stroke();
           ctx.restore();
         } else {
-          const useMiddle = p.center;
-          if (useMiddle) ctx.textBaseline = 'middle';
+          // center=true for all editor placements: align textAlign to match overlay's translate(-50%)
+          if (p.center) { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; }
           ctx.fillText(p.value, cx, cy);
-          if (useMiddle) ctx.textBaseline = 'alphabetic';
+          if (p.center) { ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; }
         }
       }
 
@@ -1764,10 +1760,10 @@
         <div id="editorChipBar" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f5f7fa;border-radius:10px;">
           ${chipHTML}
           <div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>
-          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('✓')}" data-label="打勾 ✓" data-isimage="false" data-fontsize="10"
+          <button class="ed-chip" data-key="check_v" data-value="${encodeURIComponent('■')}" data-label="■ 方塊" data-isimage="false" data-fontsize="10"
             onclick="selectEditorChip(this)"
-            style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#f0fff4;cursor:pointer;font-size:18px;font-weight:700;color:#1a7a3c;">✓</button>
-          <button class="ed-chip" data-key="check_x" data-value="${encodeURIComponent('✗')}" data-label="叉叉 ✗" data-isimage="false" data-fontsize="10"
+            style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#f0fff4;cursor:pointer;font-size:18px;font-weight:700;color:#111;">■</button>
+          <button class="ed-chip" data-key="check_x" data-value="${encodeURIComponent('✗')}" data-label="✗ 叉叉" data-isimage="false" data-fontsize="10"
             onclick="selectEditorChip(this)"
             style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#fff5f5;cursor:pointer;font-size:18px;font-weight:700;color:#c0392b;">✗</button>
           ${imgChipHTML ? '<div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>' + imgChipHTML : ''}
