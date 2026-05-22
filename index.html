@@ -1286,10 +1286,30 @@
         const fs = Math.max(p.fontSize, 7) * scale * 0.72;
         ctx.font = `${fs}px 'PingFang TC','Noto Sans TC',sans-serif`;
         ctx.fillStyle = '#000';
-        const useMiddle = p.center || p.value === '✓' || p.value === '✗';
-        if (useMiddle) ctx.textBaseline = 'middle';
-        ctx.fillText(p.value, p.x * scale, viewport.height - p.y * scale);
-        if (useMiddle) ctx.textBaseline = 'alphabetic';
+        const cx = p.x * scale;
+        const cy = viewport.height - p.y * scale;
+        if (p.value === '✓') {
+          const sz = fs * 0.45;
+          ctx.save(); ctx.strokeStyle = '#000'; ctx.lineWidth = sz * 0.22;
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(cx - sz * 0.45, cy - sz * 0.05);
+          ctx.lineTo(cx - sz * 0.1,  cy + sz * 0.45);
+          ctx.lineTo(cx + sz * 0.55, cy - sz * 0.55);
+          ctx.stroke(); ctx.restore();
+        } else if (p.value === '✗') {
+          const sz = fs * 0.38;
+          ctx.save(); ctx.strokeStyle = '#000'; ctx.lineWidth = sz * 0.22;
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(cx - sz, cy - sz); ctx.lineTo(cx + sz, cy + sz); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx + sz, cy - sz); ctx.lineTo(cx - sz, cy + sz); ctx.stroke();
+          ctx.restore();
+        } else {
+          const useMiddle = p.center;
+          if (useMiddle) ctx.textBaseline = 'middle';
+          ctx.fillText(p.value, cx, cy);
+          if (useMiddle) ctx.textBaseline = 'alphabetic';
+        }
       }
 
       // Draw images in their placement areas
@@ -1754,7 +1774,7 @@
         </div>
         <div style="position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#ccc;">
           <canvas id="editorCanvas" style="display:block;width:100%;"></canvas>
-          <div id="editorOverlay" style="position:absolute;inset:0;touch-action:auto;" onclick="handleEditorClick(event)" ontouchend="handleEditorTouch(event)"></div>
+          <div id="editorOverlay" style="position:absolute;inset:0;touch-action:auto;"></div>
         </div>
         <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
           <button onclick="editorChangePage(-1)" style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;cursor:pointer;background:#fff;">← 上一頁</button>
@@ -1764,6 +1784,29 @@
       </div>`;
 
     await renderEditorPage(1);
+
+    // Unified tap-to-place using Pointer Events (works identically on mobile + desktop)
+    let _tapStart = null;
+    const overlay = document.getElementById('editorOverlay');
+    overlay.addEventListener('pointerdown', e => {
+      if (!activeChipData) return;
+      _tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+    });
+    overlay.addEventListener('pointerup', e => {
+      if (!activeChipData || !_tapStart) { _tapStart = null; return; }
+      const dx = e.clientX - _tapStart.x, dy = e.clientY - _tapStart.y;
+      const isTap = Math.sqrt(dx*dx + dy*dy) < 10 && (Date.now() - _tapStart.t) < 400;
+      _tapStart = null;
+      if (!isTap) return;
+      const rect = overlay.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return;
+      editorPlacements.push({ id: 'pl_' + Date.now(), page: editorPage, nx, ny, nw: 0.22, nh: 0.14, ...activeChipData });
+      activeChipData = null;
+      document.querySelectorAll('.ed-chip').forEach(b => b.classList.remove('active'));
+      refreshOverlayDivs();
+    });
   }
 
   async function renderEditorPage(pageNum) {
