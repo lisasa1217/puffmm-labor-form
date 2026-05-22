@@ -1768,6 +1768,10 @@
             style="padding:4px 14px;border-radius:16px;border:2px solid #d0d5dd;background:#fff5f5;cursor:pointer;font-size:18px;font-weight:700;color:#c0392b;">✗</button>
           ${imgChipHTML ? '<div style="width:100%;border-top:1px solid #e0e0e0;margin:4px 0;"></div>' + imgChipHTML : ''}
         </div>
+        <div id="editorCheckboxBar" style="display:none;background:#ebf8ff;border:1px solid #90cdf4;border-radius:8px;padding:8px 10px;">
+          <div style="font-size:11px;color:#2b6cb0;font-weight:600;margin-bottom:5px;">📋 偵測到勾選框 — 點按鈕自動放置，不用手動對準</div>
+          <div id="editorCheckboxBtns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        </div>
         <div style="position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#ccc;">
           <canvas id="editorCanvas" style="display:block;width:100%;"></canvas>
           <div id="editorOverlay" style="position:absolute;inset:0;touch-action:auto;"></div>
@@ -1817,6 +1821,56 @@
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     document.getElementById('editorPageInfo').textContent = `第 ${pageNum} / ${editorPdf.numPages} 頁`;
     refreshOverlayDivs();
+    detectAndShowCheckboxes(page);
+  }
+
+  async function detectAndShowCheckboxes(page) {
+    try {
+      const vp = page.getViewport({ scale: 1 });
+      const tc = await page.getTextContent();
+      const found = [];
+      const BOX_CHARS = new Set(['□', '☐', '▢', '◻']);
+      for (const item of tc.items) {
+        if (!item.str) continue;
+        const chars = [...item.str];
+        const charW = chars.length > 0 ? (item.width || 10) / chars.length : 10;
+        for (let i = 0; i < chars.length; i++) {
+          if (BOX_CHARS.has(chars[i])) {
+            const baseX = item.transform[4];
+            const baseY = item.transform[5];
+            const charCX = baseX + i * charW + charW / 2;
+            const charCY = baseY + (item.height || 10) / 2;
+            const nx = Math.max(0, Math.min(1, charCX / vp.width));
+            const ny = Math.max(0, Math.min(1, 1 - charCY / vp.height));
+            const rest = chars.slice(i + 1, i + 8).join('').trim();
+            const label = rest.substring(0, 6) || `框${found.length + 1}`;
+            found.push({ nx, ny, label });
+          }
+        }
+      }
+      const bar = document.getElementById('editorCheckboxBar');
+      const btns = document.getElementById('editorCheckboxBtns');
+      if (!bar || !btns) return;
+      if (found.length === 0) { bar.style.display = 'none'; return; }
+      btns.innerHTML = '';
+      found.forEach(box => {
+        const btn = document.createElement('button');
+        btn.textContent = '■ ' + box.label;
+        btn.style.cssText = 'padding:5px 12px;border-radius:14px;border:1.5px solid #90cdf4;background:#ebf8ff;cursor:pointer;font-size:13px;color:#1a365d;touch-action:manipulation;';
+        btn.addEventListener('pointerdown', e => { e.stopPropagation(); });
+        btn.onclick = () => {
+          editorPlacements.push({
+            id: 'pl_' + Date.now(), page: editorPage,
+            nx: box.nx, ny: box.ny, nw: 0.04, nh: 0.03,
+            key: 'check_v', value: '■', label: '■ ' + box.label,
+            isImage: false, fontSize: 10, center: true
+          });
+          refreshOverlayDivs();
+        };
+        btns.appendChild(btn);
+      });
+      bar.style.display = 'block';
+    } catch(e) { console.warn('checkbox detect failed', e); }
   }
 
   function refreshOverlayDivs() {
